@@ -32,15 +32,29 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.radianite.data.store.KINGDOM_CREDITS_UUID
+import app.radianite.data.store.RADIANITE_POINTS_UUID
+import app.radianite.data.store.StoreBundle
 import app.radianite.data.store.StoreSkin
+import app.radianite.data.store.VALORANT_POINTS_UUID
+import app.radianite.data.store.Wallet
 import app.radianite.ui.VersionLabel
+import app.radianite.ui.common.MessageBanner
+import app.radianite.ui.common.SectionHeader
+import app.radianite.ui.common.countdown
+import app.radianite.ui.theme.Display
+import app.radianite.ui.theme.Ink
 import app.radianite.ui.theme.InkRaised
+import app.radianite.ui.theme.Mono
 import app.radianite.ui.theme.Muted
 import app.radianite.ui.theme.ValorantRed
 import app.radianite.ui.theme.rgbaColor
@@ -81,14 +95,29 @@ fun StoreScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                state.store?.let { store ->
-                    item(key = "countdown") { ResetCountdown(store.expiresAtMillis, onExpired = onRefresh) }
+                // One always-present top item: rows that appear above the first visible item would
+                // otherwise be inserted off-screen, since the list keeps its scroll anchored to that item.
+                item(key = "header") {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        state.wallet?.let { WalletRow(it) }
+                        state.store?.let { ResetCountdown(it.expiresAtMillis, onExpired = onRefresh) }
+                    }
                 }
                 state.message?.let { message ->
                     item(key = "message") { MessageBanner(message) }
                 }
                 state.store?.let { store ->
                     items(store.skins, key = { it.levelUuid }) { SkinCard(it, onClick = { onOpenSkin(it) }) }
+                    store.nightMarketExpiresAtMillis?.takeIf { store.nightMarket.isNotEmpty() }?.let { endsAt ->
+                        item(key = "night-market-header") { TimedHeader("NIGHT MARKET", endsAt) }
+                        items(store.nightMarket, key = { "night-" + it.skin.levelUuid }) { offer ->
+                            SkinCard(offer.skin, onClick = { onOpenSkin(offer.skin) }, basePriceVp = offer.basePriceVp, discountPercent = offer.discountPercent)
+                        }
+                    }
+                    if (store.bundles.isNotEmpty()) {
+                        item(key = "bundles-header") { SectionHeader("FEATURED BUNDLES") }
+                        items(store.bundles, key = { "bundle-" + it.name + it.expiresAtMillis }) { BundleCard(it) }
+                    }
                 }
                 if (state.store == null && !state.refreshing && state.message == null) {
                     item(key = "empty") {
@@ -140,20 +169,68 @@ internal fun formatDuration(millis: Long): String {
 }
 
 @Composable
-private fun MessageBanner(message: String) {
-    Text(
-        message,
-        color = Color.White,
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(ValorantRed.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
-            .padding(12.dp),
-    )
+private fun WalletRow(wallet: Wallet) {
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Balance(VALORANT_POINTS_UUID, wallet.valorantPoints)
+        Balance(RADIANITE_POINTS_UUID, wallet.radianite)
+        Balance(KINGDOM_CREDITS_UUID, wallet.kingdomCredits)
+    }
 }
 
 @Composable
-private fun SkinCard(skin: StoreSkin, onClick: () -> Unit) {
+private fun Balance(currencyUuid: String, amount: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        AsyncImage(model = "https://media.valorant-api.com/currencies/$currencyUuid/displayicon.png", contentDescription = null, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text("%,d".format(amount), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+    }
+}
+
+/** Section title with a coarse countdown, for offers that run for days. */
+@Composable
+private fun TimedHeader(title: String, endsAtMillis: Long) {
+    Row(verticalAlignment = Alignment.Bottom) {
+        SectionHeader(title, Modifier.weight(1f))
+        val remaining = endsAtMillis - System.currentTimeMillis()
+        if (remaining > 0) {
+            Text("ENDS IN ${countdown(remaining).uppercase()}", fontFamily = Mono, fontSize = 11.sp, color = ValorantRed, modifier = Modifier.padding(bottom = 8.dp))
+        }
+    }
+}
+
+@Composable
+private fun BundleCard(bundle: StoreBundle) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(InkRaised),
+    ) {
+        AsyncImage(model = bundle.artUrl, contentDescription = bundle.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Ink.copy(alpha = 0.9f)))))
+        Column(
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(14.dp),
+        ) {
+            Text(bundle.name.uppercase(), fontFamily = Display, fontSize = 24.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                bundle.priceVp?.let { Text("%,d VP".format(it), fontWeight = FontWeight.Bold) }
+                if (bundle.basePriceVp != null && bundle.priceVp != null && bundle.basePriceVp > bundle.priceVp) {
+                    Spacer(Modifier.width(8.dp))
+                    Text("%,d".format(bundle.basePriceVp), color = Muted, textDecoration = TextDecoration.LineThrough, fontSize = 12.sp)
+                }
+                Spacer(Modifier.weight(1f))
+                val remaining = bundle.expiresAtMillis - System.currentTimeMillis()
+                if (remaining > 0) Text(countdown(remaining), fontFamily = Mono, fontSize = 11.sp, color = Muted)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SkinCard(skin: StoreSkin, onClick: () -> Unit, basePriceVp: Int? = null, discountPercent: Int = 0) {
     val tierColor = remember(skin.tierColor) { rgbaColor(skin.tierColor)?.copy(alpha = 1f) ?: Muted }
     val background = remember(tierColor) {
         Brush.linearGradient(listOf(tierColor.copy(alpha = 0.35f), InkRaised, InkRaised))
@@ -199,6 +276,22 @@ private fun SkinCard(skin: StoreSkin, onClick: () -> Unit) {
                 )
                 skin.priceVp?.let { price ->
                     Text("%,d VP".format(price), style = MaterialTheme.typography.titleMedium, color = tierColor)
+                }
+            }
+            if (discountPercent > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                    Text(
+                        "−$discountPercent%",
+                        fontFamily = Mono,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = Color.White,
+                        modifier = Modifier
+                            .background(ValorantRed, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                    Spacer(Modifier.weight(1f))
+                    basePriceVp?.let { Text("%,d VP".format(it), color = Muted, textDecoration = TextDecoration.LineThrough, fontSize = 12.sp) }
                 }
             }
             skin.tierName?.let {

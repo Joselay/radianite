@@ -1,0 +1,110 @@
+package app.radianite.data.player
+
+import app.radianite.data.content.ActInfo
+import app.radianite.data.content.BattlePassInfo
+import app.radianite.data.content.GameContent
+import app.radianite.data.riot.ContractsResponse
+import app.radianite.data.riot.PlayerMmrResponse
+import kotlinx.serialization.json.Json
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class CareerTest {
+    private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
+
+    private val content = GameContent(
+        version = "v",
+        agents = emptyMap(),
+        maps = emptyMap(),
+        ranks = emptyMap(),
+        acts = listOf(
+            ActInfo("act-old", "V25 · ACT VI", startMillis = 0, endMillis = 100),
+            ActInfo("act-now", "V26 · ACT I", startMillis = 100, endMillis = 200),
+        ),
+        queues = emptyMap(),
+        weapons = emptyMap(),
+        titles = emptyMap(),
+        battlePasses = mapOf(
+            "pass-old" to BattlePassInfo("Old pass", "act-old", listOf(0, 2000, 2750)),
+            "pass-now" to BattlePassInfo("New pass", "act-now", listOf(0, 2000, 2750, 3500)),
+        ),
+    )
+
+    private val mmr = json.decodeFromString<PlayerMmrResponse>(
+        """
+        {
+          "QueueSkills": {
+            "competitive": {
+              "CurrentSeasonGamesNeededForRating": 0,
+              "SeasonalInfoBySeasonID": {
+                "ACT-NOW": {"SeasonID": "ACT-NOW", "NumberOfWins": 6, "NumberOfGames": 10, "CompetitiveTier": 15,
+                            "RankedRating": 10, "LeaderboardRank": 0, "WinsByTier": {"14": 2, "16": 1, "15": 3}},
+                "act-old": {"SeasonID": "act-old", "NumberOfWins": 20, "NumberOfGames": 35, "CompetitiveTier": 14,
+                            "WinsByTier": {"12": 5, "14": 15}},
+                "act-unknown": {"SeasonID": "act-unknown", "NumberOfWins": 1, "NumberOfGames": 1}
+              }
+            },
+            "unrated": {"SeasonalInfoBySeasonID": null}
+          },
+          "LatestCompetitiveUpdate": {"MatchID": "m9", "SeasonID": "act-now", "TierAfterUpdate": 16, "RankedRatingAfterUpdate": 42}
+        }
+        """.trimIndent(),
+    )
+
+    @Test
+    fun `rank comes from the latest ranked game, act stats from the current act`() {
+        val rank = rankStatus(mmr, content, nowMillis = 150)!!
+        assertEquals(16, rank.tier)
+        assertEquals(42, rank.rankedRating)
+        assertEquals("V26 · ACT I", rank.actName)
+        assertEquals(6, rank.wins)
+        assertEquals(60, rank.winPercent)
+        assertEquals(16, rank.peakTier)
+    }
+
+    @Test
+    fun `rank falls back to act info before any ranked update`() {
+        val fresh = mmr.copy(latestCompetitiveUpdate = mmr.latestCompetitiveUpdate!!.copy(matchId = ""))
+        val rank = rankStatus(fresh, content, nowMillis = 150)!!
+        assertEquals(15, rank.tier)
+        assertEquals(10, rank.rankedRating)
+    }
+
+    @Test
+    fun `no competitive data means no rank`() {
+        assertNull(rankStatus(PlayerMmrResponse(), content, nowMillis = 150))
+    }
+
+    @Test
+    fun `act history lists known acts newest first with their peak`() {
+        val history = actHistory(mmr, content)
+        assertEquals(listOf("act-now", "act-old"), history.map { it.actUuid })
+        assertEquals(14, history[1].peakTier)
+        assertEquals(35, history[1].games)
+    }
+
+    @Test
+    fun `battle pass progress uses the current act's pass`() {
+        val contracts = json.decodeFromString<ContractsResponse>(
+            """
+            {"Contracts": [
+              {"ContractDefinitionID": "PASS-OLD", "ProgressionLevelReached": 3, "ProgressionTowardsNextLevel": 0},
+              {"ContractDefinitionID": "pass-now", "ProgressionLevelReached": 2, "ProgressionTowardsNextLevel": 1200},
+              {"ContractDefinitionID": "agent-contract", "ProgressionLevelReached": 5}
+            ]}
+            """.trimIndent(),
+        )
+        val pass = battlePass(contracts, content, nowMillis = 150)!!
+        assertEquals("New pass", pass.name)
+        assertEquals(2, pass.level)
+        assertEquals(4, pass.totalLevels)
+        assertEquals(1200, pass.xpIntoLevel)
+        assertEquals(2750, pass.xpForLevel)
+
+        // Before the current act's pass is touched, show the newest one the player has.
+        val oldOnly = ContractsResponse(contracts.contracts.take(1))
+        assertEquals("Old pass", battlePass(oldOnly, content, nowMillis = 150)!!.name)
+        assertNull(battlePass(ContractsResponse(), content, nowMillis = 150))
+    }
+}

@@ -14,9 +14,15 @@ data class RiotSession(
     val gameName: String?,
     val tagLine: String?,
     val shard: String,
+    /** PAS live affinity (na, latam, br, eu, ap, kr); null for sessions saved by older builds. */
+    val region: String? = null,
 ) {
     val riotId: String
         get() = if (gameName != null && tagLine != null) "$gameName#$tagLine" else "Signed in"
+
+    /** Region for glz hosts and leaderboards; falls back to the shard for sessions saved without one. */
+    val affinity: String
+        get() = region?.lowercase() ?: shard
 }
 
 @Serializable
@@ -52,6 +58,22 @@ data class RiotErrorBody(
 data class StorefrontResponse(
     @SerialName("SkinsPanelLayout") val skinsPanel: SkinsPanelLayout? = null,
     @SerialName("FeaturedBundle") val featuredBundle: FeaturedBundleLayout? = null,
+    /** The Night Market; only present while one is running. */
+    @SerialName("BonusStore") val bonusStore: BonusStore? = null,
+)
+
+@Serializable
+data class BonusStore(
+    @SerialName("BonusStoreOffers") val offers: List<BonusOffer> = emptyList(),
+    @SerialName("BonusStoreRemainingDurationInSeconds") val remainingSeconds: Long = 0,
+)
+
+@Serializable
+data class BonusOffer(
+    @SerialName("BonusOfferID") val bonusOfferId: String,
+    @SerialName("Offer") val offer: StoreOffer,
+    @SerialName("DiscountPercent") val discountPercent: Int = 0,
+    @SerialName("DiscountCosts") val discountCosts: Map<String, Int> = emptyMap(),
 )
 
 @Serializable
@@ -63,6 +85,9 @@ data class FeaturedBundleLayout(
 @Serializable
 data class FeaturedBundleOffer(
     @SerialName("DataAssetID") val dataAssetId: String,
+    @SerialName("TotalBaseCost") val totalBaseCost: Map<String, Int>? = null,
+    @SerialName("TotalDiscountedCost") val totalDiscountedCost: Map<String, Int>? = null,
+    @SerialName("DurationRemainingInSeconds") val remainingSeconds: Long = 0,
 )
 
 @Serializable

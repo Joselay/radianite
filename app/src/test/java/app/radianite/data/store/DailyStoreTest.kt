@@ -3,8 +3,10 @@ package app.radianite.data.store
 import app.radianite.data.content.ApiContentTier
 import app.radianite.data.content.ApiSkin
 import app.radianite.data.content.ApiSkinLevel
+import app.radianite.data.content.CatalogBundle
 import app.radianite.data.content.buildCatalog
 import app.radianite.data.riot.StorefrontResponse
+import app.radianite.data.riot.WalletResponse
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -70,5 +72,56 @@ class DailyStoreTest {
         val store = StorefrontResponse(null).toDailyStore("p", catalog, nowMillis = 5)
         assertEquals(emptyList<StoreSkin>(), store.skins)
         assertEquals(5L, store.expiresAtMillis)
+    }
+
+    @Test
+    fun `maps the night market and featured bundle prices`() {
+        val body = """
+            {
+              "FeaturedBundle": {"Bundles": [
+                {"DataAssetID": "BUNDLE-1", "DurationRemainingInSeconds": 7200,
+                 "TotalBaseCost": {"$VALORANT_POINTS_UUID": 9000}, "TotalDiscountedCost": {"$VALORANT_POINTS_UUID": 7100}}
+              ]},
+              "BonusStore": {
+                "BonusStoreOffers": [
+                  {"BonusOfferID": "b1", "DiscountPercent": 33, "DiscountCosts": {"$VALORANT_POINTS_UUID": 1189},
+                   "Offer": {"OfferID": "aaaa-1", "Cost": {"$VALORANT_POINTS_UUID": 1775},
+                             "Rewards": [{"ItemTypeID": "e7c63390", "ItemID": "AAAA-1", "Quantity": 1}]}}
+                ],
+                "BonusStoreRemainingDurationInSeconds": 86400
+              }
+            }
+        """.trimIndent()
+        val withBundle = catalog.copy(bundles = mapOf("bundle-1" to CatalogBundle("Reaver 2.0", "art.png")))
+
+        val store = json.decodeFromString<StorefrontResponse>(body).toDailyStore("p", withBundle, nowMillis = 0)
+
+        val bundle = store.bundles.single()
+        assertEquals("Reaver 2.0", bundle.name)
+        assertEquals(7100, bundle.priceVp)
+        assertEquals(9000, bundle.basePriceVp)
+        assertEquals(7_200_000L, bundle.expiresAtMillis)
+
+        val offer = store.nightMarket.single()
+        assertEquals("Reaver Vandal", offer.skin.name)
+        assertEquals(1189, offer.skin.priceVp)
+        assertEquals(1775, offer.basePriceVp)
+        assertEquals(33, offer.discountPercent)
+        assertEquals(86_400_000L, store.nightMarketExpiresAtMillis)
+    }
+
+    @Test
+    fun `no night market when the bonus store is absent`() {
+        val store = StorefrontResponse(null).toDailyStore("p", catalog, nowMillis = 5)
+        assertEquals(emptyList<NightMarketOffer>(), store.nightMarket)
+        assertNull(store.nightMarketExpiresAtMillis)
+    }
+
+    @Test
+    fun `reads wallet balances by currency`() {
+        val wallet = json.decodeFromString<WalletResponse>(
+            """{"Balances": {"$VALORANT_POINTS_UUID": 1250, "$RADIANITE_POINTS_UUID": 40, "$KINGDOM_CREDITS_UUID": 8000}}""",
+        ).toWallet()
+        assertEquals(Wallet(valorantPoints = 1250, radianite = 40, kingdomCredits = 8000), wallet)
     }
 }

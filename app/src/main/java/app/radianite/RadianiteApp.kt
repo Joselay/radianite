@@ -15,12 +15,16 @@ import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import app.radianite.data.AppFiles
+import app.radianite.data.content.GameContentRepository
 import app.radianite.data.content.SkinCatalogRepository
 import app.radianite.data.content.SkinDetailRepository
+import app.radianite.data.match.MatchRepository
+import app.radianite.data.player.PlayerRepository
 import app.radianite.data.riot.RiotApi
 import app.radianite.data.riot.RiotAuth
-import app.radianite.data.store.AppFiles
-import app.radianite.data.store.RiotCookies
+import app.radianite.data.riot.RiotCookies
+import app.radianite.data.riot.SessionManager
 import app.radianite.data.store.StoreRepository
 import coil3.ImageLoader
 import coil3.PlatformContext
@@ -71,15 +75,26 @@ class AppContainer(context: Context) {
             .build()
     }
 
-    val storeRepository: StoreRepository by lazy {
-        StoreRepository(
-            riot = RiotApi(http, json),
-            catalog = SkinCatalogRepository(http, json, File(appContext.filesDir, "skin_catalog.json")),
+    private val riot by lazy { RiotApi(http, json) }
+    private val files by lazy { AppFiles(appContext.filesDir, json) }
+    private val catalog by lazy { SkinCatalogRepository(http, json, File(appContext.filesDir, "skin_catalog.json")) }
+    private val gameContent by lazy { GameContentRepository(http, json, File(appContext.filesDir, "game_content.json")) }
+
+    val sessions: SessionManager by lazy {
+        SessionManager(
+            riot = riot,
             cookies = WebViewRiotCookies(),
-            files = AppFiles(appContext.filesDir, json),
+            files = files,
             userAgent = { WebSettings.getDefaultUserAgent(appContext) },
+            fetchClientVersion = catalog::clientVersion,
         )
     }
+
+    val storeRepository: StoreRepository by lazy { StoreRepository(riot, sessions, catalog, files) }
+
+    val matchRepository: MatchRepository by lazy { MatchRepository(riot, sessions, gameContent, files) }
+
+    val playerRepository: PlayerRepository by lazy { PlayerRepository(riot, sessions, gameContent, catalog) }
 
     val skinDetailRepository: SkinDetailRepository by lazy { SkinDetailRepository(http, json) }
 
