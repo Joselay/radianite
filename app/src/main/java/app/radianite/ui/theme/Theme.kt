@@ -15,10 +15,10 @@ val InkRaised = Color(0xFF1B2733)
 val Bone = Color(0xFFECE8E1)
 val Muted = Color(0xFF8B978F)
 
-/** Condensed display face for headlines, close to VALORANT's own. Bundled under the OFL. */
+/** Condensed display face for headlines, close to VALORANT's own. */
 val Display = FontFamily(Font(R.font.anton))
 
-/** Monospace for the tactical HUD labels. Bundled under the OFL. */
+/** Monospace for the tactical HUD labels. */
 val Mono = FontFamily(Font(R.font.jetbrains_mono), Font(R.font.jetbrains_mono_bold, FontWeight.Bold))
 
 private val colors = darkColorScheme(

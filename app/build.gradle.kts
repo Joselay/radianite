@@ -23,7 +23,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             // Personal sideload build; swap for a real keystore before distributing.
             signingConfig = signingConfigs.getByName("debug")
         }

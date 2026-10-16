@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import app.radianite.data.riot.AuthTokens
 import app.radianite.data.riot.RiotHttpException
 import app.radianite.data.store.DailyStore
+import app.radianite.data.store.FeaturedBundle
 import app.radianite.data.store.SessionExpiredException
 import app.radianite.data.store.StoreRepository
 import kotlinx.coroutines.CancellationException
@@ -34,10 +35,14 @@ class StoreViewModel(private val repository: StoreRepository) : ViewModel() {
     private val _state = MutableStateFlow<AppUiState>(AppUiState.Loading)
     val state: StateFlow<AppUiState> = _state.asStateFlow()
 
+    private val _featuredBundles = MutableStateFlow<List<FeaturedBundle>>(emptyList())
+    val featuredBundles: StateFlow<List<FeaturedBundle>> = _featuredBundles.asStateFlow()
+
     private var refreshJob: Job? = null
 
     init {
         viewModelScope.launch {
+            _featuredBundles.value = repository.featuredBundles()
             val session = repository.savedSession()
             if (session == null) {
                 _state.value = AppUiState.SignedOut()
@@ -57,6 +62,7 @@ class StoreViewModel(private val repository: StoreRepository) : ViewModel() {
                 val store = repository.fetchDailyStore()
                 val riotId = repository.savedSession()?.riotId.orEmpty()
                 _state.value = AppUiState.Store(riotId, store, refreshing = false, message = null)
+                _featuredBundles.value = repository.featuredBundles()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SessionExpiredException) {

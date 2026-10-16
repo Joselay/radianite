@@ -2,9 +2,9 @@ package app.radianite.ui.signin
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
-import android.net.Uri
 import android.provider.Settings
 import android.webkit.CookieManager
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -100,11 +100,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.net.toUri
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import app.radianite.R
 import app.radianite.data.riot.AuthTokens
 import app.radianite.data.riot.RiotAuth
+import app.radianite.data.store.FeaturedBundle
 import app.radianite.ui.theme.Bone
 import app.radianite.ui.theme.Display
 import app.radianite.ui.theme.Ink
@@ -119,15 +121,10 @@ import kotlin.math.sin
 
 private val ValorantRedPressed = Color(0xFFE03A48)
 
-private class FeaturedArt(val name: String, val url: String)
-
-/** Bundle promo art from valorant-api.com, shown in the welcome screen's viewport. */
-private val FeaturedArtwork = listOf(
-    FeaturedArt("Kuronami", "https://media.valorant-api.com/bundles/69d9b2be-4439-0785-780b-ba8951053683/verticalpromoimage.png"),
-    FeaturedArt("Reaver", "https://media.valorant-api.com/bundles/81d85522-4651-4f66-72de-5fa057b3514c/verticalpromoimage.png"),
-    FeaturedArt("Prelude to Chaos", "https://media.valorant-api.com/bundles/2f58cd79-4914-9dc6-ea10-b8b9ea481add/verticalpromoimage.png"),
-    FeaturedArt("Champions 2023", "https://media.valorant-api.com/bundles/90ee89df-40cf-03d3-420f-3d9a1b81d85b/verticalpromoimage.png"),
-    FeaturedArt("RGX 11z Pro", "https://media.valorant-api.com/bundles/35815cab-429d-79e4-43f5-e0af8fdac22b/verticalpromoimage.png"),
+/** Shown until the first store fetch saves the live featured bundles. */
+private val FallbackFeaturedBundles = listOf(
+    FeaturedBundle("Popmonz", "https://media.valorant-api.com/bundles/f67ab55a-4480-f305-9891-9bac1b17459f/verticalpromoimage.png"),
+    FeaturedBundle("Champions 2026", "https://media.valorant-api.com/bundles/82a19267-4739-d2d0-2a6a-5db2e69e3d89/verticalpromoimage.png"),
 )
 
 private const val AUTO_ADVANCE_MILLIS = 5_000
@@ -148,7 +145,7 @@ private const val RIOT_LOGIN_LAYER_FIX = """
 """
 
 @Composable
-fun SignedOutScreen(message: String?, onSignIn: () -> Unit) {
+fun SignedOutScreen(message: String?, featuredBundles: List<FeaturedBundle>, onSignIn: () -> Unit) {
     val motion = rememberMotionEnabled()
     val appear = remember { Animatable(if (motion) 0f else 1f) }
     LaunchedEffect(Unit) { appear.animateTo(1f, tween(1_000, easing = FastOutSlowInEasing)) }
@@ -184,6 +181,7 @@ fun SignedOutScreen(message: String?, onSignIn: () -> Unit) {
             }
             Spacer(Modifier.height(20.dp))
             FeaturedViewport(
+                bundles = featuredBundles.ifEmpty { FallbackFeaturedBundles },
                 motion = motion,
                 bracketProgress = { ((appear.value - 0.1f) / 0.5f).coerceIn(0f, 1f) },
                 modifier = Modifier
@@ -204,55 +202,48 @@ fun SignedOutScreen(message: String?, onSignIn: () -> Unit) {
                 color = Bone,
                 modifier = Modifier.reveal(2),
             )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Your four daily offers, without launching the game.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = Bone.copy(alpha = 0.75f),
-                modifier = Modifier.reveal(3),
-            )
             Spacer(Modifier.height(24.dp))
-            Column(Modifier.reveal(4)) {
+            Column(Modifier.reveal(3)) {
                 message?.let {
                     ErrorBanner(it)
                     Spacer(Modifier.height(16.dp))
                 }
                 HudButton("SIGN IN WITH RIOT", onSignIn)
-                Spacer(Modifier.height(14.dp))
-                Row(Modifier.align(Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(painterResource(R.drawable.ic_lock), contentDescription = null, tint = Muted, modifier = Modifier.size(12.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Signs in on auth.riotgames.com · password never stored", style = MaterialTheme.typography.labelMedium, color = Muted)
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Unofficial store data · not endorsed by Riot Games",
-                    fontFamily = Mono,
-                    fontSize = 10.sp,
-                    color = Muted.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
             }
         }
     }
 }
 
 /**
- * Swipeable bundle art in a HUD frame. Advances on its own with story-style progress bars and a
- * slow zoom, pauses while the user drags, and holds still when system animations are off.
+ * Swipeable featured-bundle art in a HUD frame. With several bundles it advances on its own with
+ * story-style progress bars and a slow zoom, pauses while the user drags, and holds still when
+ * system animations are off.
  */
 @Composable
-private fun FeaturedViewport(motion: Boolean, bracketProgress: () -> Float, modifier: Modifier) {
-    val count = FeaturedArtwork.size
+private fun FeaturedViewport(
+    bundles: List<FeaturedBundle>,
+    motion: Boolean,
+    bracketProgress: () -> Float,
+    modifier: Modifier,
+) {
+    val count = bundles.size
+    val cycles = count > 1
     // A huge page count with a centred start lets the pager loop in both directions.
-    val pager = rememberPagerState(initialPage = Int.MAX_VALUE / 2 - (Int.MAX_VALUE / 2) % count) { Int.MAX_VALUE }
+    val pager = rememberPagerState(
+        initialPage = if (cycles) Int.MAX_VALUE / 2 - (Int.MAX_VALUE / 2) % count else 0,
+    ) { if (cycles) Int.MAX_VALUE else count }
     val dragged by pager.interactionSource.collectIsDraggedAsState()
+    // Progress of the settled page. A drag pauses it; it restarts only once a new page settles.
     val progress = remember { Animatable(0f) }
+    var progressPage by remember { mutableIntStateOf(pager.settledPage) }
     LaunchedEffect(pager.settledPage, dragged, motion) {
-        if (!motion || dragged) return@LaunchedEffect
-        progress.snapTo(0f)
-        progress.animateTo(1f, tween(AUTO_ADVANCE_MILLIS, easing = LinearEasing))
+        if (!cycles || !motion || dragged) return@LaunchedEffect
+        if (progressPage != pager.settledPage) {
+            progressPage = pager.settledPage
+            progress.snapTo(0f)
+        }
+        val remaining = ((1f - progress.value) * AUTO_ADVANCE_MILLIS).toInt()
+        progress.animateTo(1f, tween(remaining, easing = LinearEasing))
         pager.animateScrollToPage(pager.currentPage + 1, animationSpec = tween(700, easing = FastOutSlowInEasing))
     }
     val active = pager.currentPage % count
@@ -273,17 +264,17 @@ private fun FeaturedViewport(motion: Boolean, bracketProgress: () -> Float, modi
                 .size(200.dp)
                 .align(Alignment.Center),
         )
-        HorizontalPager(pager, beyondViewportPageCount = 1, modifier = Modifier.fillMaxSize()) { page ->
-            val art = FeaturedArtwork[page % count]
+        HorizontalPager(pager, beyondViewportPageCount = 1, userScrollEnabled = cycles, modifier = Modifier.fillMaxSize()) { page ->
+            val bundle = bundles[page % count]
             AsyncImage(
-                model = art.url,
-                contentDescription = "${art.name} bundle artwork",
+                model = bundle.artUrl,
+                contentDescription = "${bundle.name} bundle artwork",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        // Zoom only the settled page, so pages don't jump scale mid-swipe.
-                        val zoom = if (page == pager.settledPage) 1f + 0.06f * progress.value else 1f
+                        // Zoom only the page the progress belongs to, so pages don't jump scale mid-swipe.
+                        val zoom = if (page == progressPage) 1f + 0.06f * progress.value else 1f
                         scaleX = zoom
                         scaleY = zoom
                     },
@@ -301,35 +292,51 @@ private fun FeaturedViewport(motion: Boolean, bracketProgress: () -> Float, modi
                 .padding(14.dp),
         ) {
             Text(
-                "FEATURED // ${FeaturedArtwork[active].name.uppercase()}",
+                "FEATURED // ${bundles[active].name.uppercase()}",
                 fontFamily = Mono,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = Bone,
             )
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                repeat(count) { i ->
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(2.dp)
-                            .background(Bone.copy(alpha = 0.25f)),
-                    ) {
-                        Box(
-                            Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(
-                                    when {
-                                        i < active -> 1f
-                                        i == active -> if (motion) progress.value else 1f
-                                        else -> 0f
-                                    },
-                                )
-                                .background(if (i == active) ValorantRed else Bone),
-                        )
+            if (cycles) {
+                Spacer(Modifier.height(10.dp))
+                ProgressBars(count, active) {
+                    when {
+                        !motion -> 1f
+                        // Until the progress has been reset for the incoming page, its bar stays empty
+                        // rather than briefly showing the previous page's fill.
+                        pager.currentPage == progressPage -> progress.value
+                        else -> 0f
                     }
                 }
+            }
+        }
+    }
+}
+
+/** One bar per bundle: earlier ones full, the active one filling, later ones empty. */
+@Composable
+private fun ProgressBars(count: Int, active: Int, activeFill: () -> Float) {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        repeat(count) { i ->
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(2.dp)
+                    .background(Bone.copy(alpha = 0.25f)),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(
+                            when {
+                                i < active -> 1f
+                                i == active -> activeFill()
+                                else -> 0f
+                            },
+                        )
+                        .background(if (i == active) ValorantRed else Bone),
+                )
             }
         }
     }
@@ -499,7 +506,9 @@ fun RiotSignInScreen(onTokens: (AuthTokens) -> Unit, onCancel: () -> Unit) {
                 .imePadding()
                 .fillMaxSize(),
         ) {
-            AndroidView(
+            // A failed load drops the WebView; retrying composes a fresh one. That also covers a
+            // crashed renderer, after which the old WebView can't be used again.
+            if (!loadFailed) AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { context ->
                     WebView(context).apply {
@@ -556,13 +565,17 @@ fun RiotSignInScreen(onTokens: (AuthTokens) -> Unit, onCancel: () -> Unit) {
                                     loadFailed = true
                                 }
                             }
+
+                            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                                loadFailed = true
+                                return true
+                            }
                         }
                         loadUrl(RiotAuth.AUTHORIZE_URL)
                     }
                 },
                 onRelease = { webView ->
                     webViewHolder[0] = null
-                    webView.stopLoading()
                     webView.destroy()
                 },
             )
@@ -570,9 +583,9 @@ fun RiotSignInScreen(onTokens: (AuthTokens) -> Unit, onCancel: () -> Unit) {
             when {
                 loadFailed -> LoadFailedPane(
                     onRetry = {
-                        loadFailed = false
+                        progress = 0
                         pageVisible = false
-                        webViewHolder[0]?.loadUrl(RiotAuth.AUTHORIZE_URL)
+                        loadFailed = false
                     },
                     onCancel = onCancel,
                 )
@@ -609,7 +622,7 @@ fun RiotSignInScreen(onTokens: (AuthTokens) -> Unit, onCancel: () -> Unit) {
 /** Shows which site the user is typing into, so they can see it's Riot's own page. */
 @Composable
 private fun AddressTitle(url: String) {
-    val uri = remember(url) { Uri.parse(url) }
+    val uri = remember(url) { url.toUri() }
     Column {
         Text("RIOT SIGN-IN", fontFamily = Display, fontSize = 20.sp, letterSpacing = 1.5.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -712,7 +725,6 @@ private fun ErrorBanner(message: String) {
     }
 }
 
-/** Faint tactical grid behind the HUD screens. */
 private fun Modifier.hudGrid(): Modifier = drawBehind {
     val step = 32.dp.toPx()
     val line = Color.White.copy(alpha = 0.035f)

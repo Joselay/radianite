@@ -21,6 +21,8 @@ data class Catalog(
     val version: String,
     val skinsByLevel: Map<String, CatalogSkin>,
     val tiers: Map<String, CatalogTier>,
+    // No default: catalogs cached before bundles were indexed fail to decode and get rebuilt.
+    val bundles: Map<String, CatalogBundle>,
 )
 
 @Serializable
@@ -38,6 +40,12 @@ data class CatalogTier(
     val name: String,
     val color: String,
     val icon: String?,
+)
+
+@Serializable
+data class CatalogBundle(
+    val name: String,
+    val art: String?,
 )
 
 @Serializable
@@ -70,7 +78,20 @@ data class ApiContentTier(
     val displayIcon: String? = null,
 )
 
-fun buildCatalog(version: String, skins: List<ApiSkin>, tiers: List<ApiContentTier>): Catalog {
+@Serializable
+data class ApiBundle(
+    val uuid: String,
+    val displayName: String,
+    val displayIcon: String? = null,
+    val verticalPromoImage: String? = null,
+)
+
+fun buildCatalog(
+    version: String,
+    skins: List<ApiSkin>,
+    tiers: List<ApiContentTier>,
+    bundles: List<ApiBundle> = emptyList(),
+): Catalog {
     val byLevel = HashMap<String, CatalogSkin>(skins.size * 2)
     for (skin in skins) {
         val icon = skin.levels.firstOrNull()?.displayIcon
@@ -83,11 +104,12 @@ fun buildCatalog(version: String, skins: List<ApiSkin>, tiers: List<ApiContentTi
         version = version,
         skinsByLevel = byLevel,
         tiers = tiers.associate { it.uuid.lowercase() to CatalogTier(it.devName, it.highlightColor, it.displayIcon) },
+        bundles = bundles.associate { it.uuid.lowercase() to CatalogBundle(it.displayName, it.verticalPromoImage ?: it.displayIcon) },
     )
 }
 
 /**
- * Skin names, icons and rarity tiers from the community-run valorant-api.com. The full skin
+ * Skin names, icons, rarity tiers and bundle art from the community-run valorant-api.com. The full skin
  * list is a few MB, so it's reduced to a compact index and cached on disk per game version.
  */
 class SkinCatalogRepository(
@@ -122,8 +144,9 @@ class SkinCatalogRepository(
     private suspend fun download(version: String): Catalog = coroutineScope {
         val skins = async { get<List<ApiSkin>>("https://valorant-api.com/v1/weapons/skins") }
         val tiers = async { get<List<ApiContentTier>>("https://valorant-api.com/v1/contenttiers") }
-        val (s, t) = skins.await() to tiers.await()
-        withContext(Dispatchers.Default) { buildCatalog(version, s, t) }
+        val bundles = async { get<List<ApiBundle>>("https://valorant-api.com/v1/bundles") }
+        val (s, t, b) = Triple(skins.await(), tiers.await(), bundles.await())
+        withContext(Dispatchers.Default) { buildCatalog(version, s, t, b) }
     }
 
     @OptIn(ExperimentalSerializationApi::class)

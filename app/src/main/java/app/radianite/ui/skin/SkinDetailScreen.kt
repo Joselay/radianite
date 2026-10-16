@@ -51,6 +51,7 @@ import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.compose.PlayerSurface
 import app.radianite.data.content.SkinVariant
@@ -149,6 +150,8 @@ private fun LoadedDetail(
 }
 
 /** One ExoPlayer for the whole screen; switching variants just swaps the media item. */
+// PlayerSurface is still marked unstable in media3-ui-compose.
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun PreviewStage(variant: SkinVariant, newPlayer: (android.content.Context) -> ExoPlayer) {
     val context = LocalContext.current

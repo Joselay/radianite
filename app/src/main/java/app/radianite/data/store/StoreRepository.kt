@@ -13,6 +13,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
 
@@ -45,6 +46,9 @@ class StoreRepository(
     suspend fun cachedStore(puuid: String): DailyStore? =
         files.read(files.dailyStore, DailyStore.serializer())?.takeIf { it.puuid == puuid && it.expiresAtMillis > clock() }
 
+    /** Featured bundles from the last store fetch, kept across sign-outs for the welcome screen. */
+    suspend fun featuredBundles(): List<FeaturedBundle> = files.read(files.featuredBundles, FeaturedBundleList).orEmpty()
+
     suspend fun completeSignIn(tokens: AuthTokens): RiotSession = sessionMutex.withLock { establish(tokens, previous = null) }
 
     suspend fun fetchDailyStore(): DailyStore = coroutineScope {
@@ -58,7 +62,9 @@ class StoreRepository(
             val renewed = freshSession(forceReauth = true)
             renewed to riot.storefront(renewed, version)
         }
-        front.toDailyStore(usedSession.puuid, catalogJob.await(), clock())
+        val catalog = catalogJob.await()
+        front.featuredBundles(catalog).takeIf { it.isNotEmpty() }?.let { files.write(files.featuredBundles, FeaturedBundleList, it) }
+        front.toDailyStore(usedSession.puuid, catalog, clock())
             .also { files.write(files.dailyStore, DailyStore.serializer(), it) }
     }
 
@@ -102,6 +108,7 @@ class StoreRepository(
 
     private companion object {
         const val TOKEN_MARGIN_MILLIS = 2 * 60 * 1000L
+        val FeaturedBundleList = ListSerializer(FeaturedBundle.serializer())
     }
 }
 
@@ -109,6 +116,9 @@ class StoreRepository(
 class AppFiles(dir: File, private val json: Json) {
     val session = File(dir, "session.json")
     val dailyStore = File(dir, "daily_store.json")
+
+    // Not account data, so clear() leaves it for the signed-out welcome screen.
+    val featuredBundles = File(dir, "featured_bundles.json")
 
     suspend fun <T> read(file: File, serializer: KSerializer<T>): T? = withContext(Dispatchers.IO) {
         if (!file.exists()) null else runCatching { json.decodeFromString(serializer, file.readText()) }.getOrNull()

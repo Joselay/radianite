@@ -51,6 +51,18 @@ data class RiotErrorBody(
 @Serializable
 data class StorefrontResponse(
     @SerialName("SkinsPanelLayout") val skinsPanel: SkinsPanelLayout? = null,
+    @SerialName("FeaturedBundle") val featuredBundle: FeaturedBundleLayout? = null,
+)
+
+@Serializable
+data class FeaturedBundleLayout(
+    @SerialName("Bundles") val bundles: List<FeaturedBundleOffer> = emptyList(),
+)
+
+/** [dataAssetId] is the bundle's UUID on valorant-api.com. */
+@Serializable
+data class FeaturedBundleOffer(
+    @SerialName("DataAssetID") val dataAssetId: String,
 )
 
 @Serializable

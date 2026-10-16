@@ -46,10 +46,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun RadianiteRoot(container: AppContainer, viewModel: StoreViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val featuredBundles by viewModel.featuredBundles.collectAsStateWithLifecycle()
     var openSkinLevel by rememberSaveable { mutableStateOf<String?>(null) }
     when (val s = state) {
         AppUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        is AppUiState.SignedOut -> SignedOutScreen(s.message, onSignIn = viewModel::startSignIn)
+        is AppUiState.SignedOut -> SignedOutScreen(s.message, featuredBundles, onSignIn = viewModel::startSignIn)
         AppUiState.SigningIn -> RiotSignInScreen(onTokens = viewModel::onSignInRedirect, onCancel = viewModel::cancelSignIn)
         AppUiState.CompletingSignIn -> CompletingSignInScreen()
         is AppUiState.Store -> {

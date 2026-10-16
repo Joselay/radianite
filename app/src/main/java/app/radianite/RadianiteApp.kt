@@ -1,3 +1,5 @@
+@file:OptIn(UnstableApi::class)
+
 package app.radianite
 
 import android.app.Application
@@ -82,7 +84,6 @@ class AppContainer(context: Context) {
     val skinDetailRepository: SkinDetailRepository by lazy { SkinDetailRepository(http, json) }
 
     // SimpleCache must be a single instance per directory for the whole process.
-    @get:OptIn(UnstableApi::class)
     private val videoCache: SimpleCache by lazy {
         SimpleCache(
             File(appContext.cacheDir, "video"),
@@ -92,7 +93,6 @@ class AppContainer(context: Context) {
     }
 
     /** Skin preview videos stream from Riot's CDN; replays come from the disk cache. */
-    @OptIn(UnstableApi::class)
     fun newVideoPlayer(context: Context): ExoPlayer {
         val dataSource = CacheDataSource.Factory()
             .setCache(videoCache)

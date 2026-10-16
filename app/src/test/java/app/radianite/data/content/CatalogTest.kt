@@ -18,4 +18,19 @@ class CatalogTest {
         assertEquals("a.png", catalog.skinsByLevel["l2"]?.icon)
         assertEquals("b-render.png", catalog.skinsByLevel["m1"]?.icon)
     }
+
+    @Test
+    fun `indexes bundles by lowercase uuid, preferring vertical promo art`() {
+        val catalog = buildCatalog(
+            "v1",
+            skins = emptyList(),
+            tiers = emptyList(),
+            bundles = listOf(
+                ApiBundle("BUNDLE-A", "Popmonz", displayIcon = "a-icon.png", verticalPromoImage = "a-promo.png"),
+                ApiBundle("bundle-b", "Old", displayIcon = "b-icon.png"),
+            ),
+        )
+        assertEquals(CatalogBundle("Popmonz", "a-promo.png"), catalog.bundles["bundle-a"])
+        assertEquals(CatalogBundle("Old", "b-icon.png"), catalog.bundles["bundle-b"])
+    }
 }
