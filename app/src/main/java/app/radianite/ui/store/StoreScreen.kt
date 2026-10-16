@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.radianite.data.store.StoreSkin
+import app.radianite.ui.VersionLabel
 import app.radianite.ui.theme.InkRaised
 import app.radianite.ui.theme.Muted
 import app.radianite.ui.theme.ValorantRed
@@ -93,6 +94,14 @@ fun StoreScreen(
                     item(key = "empty") {
                         Text("Pull down to load your store.", color = Muted, modifier = Modifier.padding(vertical = 32.dp))
                     }
+                }
+                item(key = "version") {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { VersionLabel() }
                 }
             }
         }

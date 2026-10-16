@@ -113,6 +113,7 @@ import app.radianite.ui.theme.Ink
 import app.radianite.ui.theme.InkRaised
 import app.radianite.ui.theme.Mono
 import app.radianite.ui.theme.Muted
+import app.radianite.ui.VersionLabel
 import app.radianite.ui.theme.ValorantRed
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
@@ -209,6 +210,8 @@ fun SignedOutScreen(message: String?, featuredBundles: List<FeaturedBundle>, onS
                     Spacer(Modifier.height(16.dp))
                 }
                 HudButton("SIGN IN WITH RIOT", onSignIn)
+                Spacer(Modifier.height(12.dp))
+                VersionLabel(Modifier.align(Alignment.CenterHorizontally))
             }
         }
     }

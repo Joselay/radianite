@@ -4,6 +4,11 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Stamps each build with the commit it came from, so the installed app identifies itself.
+fun git(vararg args: String) = providers.exec { commandLine("git", *args) }.standardOutput.asText.get().trim()
+val commitCount = git("rev-list", "--count", "HEAD").toInt()
+val commit = git("rev-parse", "--short", "HEAD") + if (git("status", "--porcelain").isNotEmpty()) "-dirty" else ""
+
 android {
     namespace = "app.radianite"
     compileSdk = 37
@@ -12,8 +17,8 @@ android {
         applicationId = "app.radianite"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = commitCount
+        versionName = "0.1.0 ($commit)"
     }
 
     buildTypes {
@@ -36,6 +41,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
