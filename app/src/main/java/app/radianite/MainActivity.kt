@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import app.radianite.ui.signin.CompletingSignInScreen
 import app.radianite.ui.signin.RiotSignInScreen
 import app.radianite.ui.signin.SignedOutScreen
 import app.radianite.ui.skin.SkinDetailScreen
@@ -50,6 +51,7 @@ private fun RadianiteRoot(container: AppContainer, viewModel: StoreViewModel) {
         AppUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         is AppUiState.SignedOut -> SignedOutScreen(s.message, onSignIn = viewModel::startSignIn)
         AppUiState.SigningIn -> RiotSignInScreen(onTokens = viewModel::onSignInRedirect, onCancel = viewModel::cancelSignIn)
+        AppUiState.CompletingSignIn -> CompletingSignInScreen()
         is AppUiState.Store -> {
             val openSkin = s.store?.skins?.find { it.levelUuid == openSkinLevel }
             val skinUuid = openSkin?.skinUuid

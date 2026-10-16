@@ -4,12 +4,22 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import app.radianite.R
 
 val ValorantRed = Color(0xFFFF4655)
 val Ink = Color(0xFF0F1923)
 val InkRaised = Color(0xFF1B2733)
 val Bone = Color(0xFFECE8E1)
 val Muted = Color(0xFF8B978F)
+
+/** Condensed display face for headlines, close to VALORANT's own. Bundled under the OFL. */
+val Display = FontFamily(Font(R.font.anton))
+
+/** Monospace for the tactical HUD labels. Bundled under the OFL. */
+val Mono = FontFamily(Font(R.font.jetbrains_mono), Font(R.font.jetbrains_mono_bold, FontWeight.Bold))
 
 private val colors = darkColorScheme(
     primary = ValorantRed,

@@ -21,6 +21,7 @@ sealed interface AppUiState {
     data object Loading : AppUiState
     data class SignedOut(val message: String? = null) : AppUiState
     data object SigningIn : AppUiState
+    data object CompletingSignIn : AppUiState
     data class Store(
         val riotId: String,
         val store: DailyStore?,
@@ -77,7 +78,7 @@ class StoreViewModel(private val repository: StoreRepository) : ViewModel() {
 
     fun onSignInRedirect(tokens: AuthTokens) {
         CookieManager.getInstance().flush()
-        _state.value = AppUiState.Loading
+        _state.value = AppUiState.CompletingSignIn
         viewModelScope.launch {
             try {
                 val session = repository.completeSignIn(tokens)
@@ -102,7 +103,7 @@ class StoreViewModel(private val repository: StoreRepository) : ViewModel() {
     private fun Exception.toUserMessage(): String = when {
         this is RiotHttpException && isMaintenance -> "VALORANT servers are under maintenance."
         this is RiotHttpException -> "Riot returned an error (${errorCode ?: status})."
-        this is IOException -> "Network problem. Check your connection and pull to retry."
+        this is IOException -> "Network problem. Check your connection and try again."
         else -> message ?: "Something went wrong."
     }
 }
