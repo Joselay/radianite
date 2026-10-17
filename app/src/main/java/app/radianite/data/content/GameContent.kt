@@ -1,19 +1,6 @@
 package app.radianite.data.content
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.decodeFromStream
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.io.File
-import java.io.IOException
 import java.time.Instant
 
 /** Names and art for the IDs the pd endpoints return, indexed from valorant-api.com. */
@@ -178,81 +165,13 @@ fun buildGameContent(
 
 private fun parseInstant(iso: String): Long? = runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull()
 
-/** Same caching scheme as [SkinCatalogRepository]: downloaded once per game version, kept compact on disk. */
-class GameContentRepository(
-    private val http: OkHttpClient,
-    private val json: Json,
-    private val cacheFile: File,
-) {
-    private val mutex = Mutex()
-
-    @Volatile
-    private var memory: GameContent? = null
-
-    suspend fun content(version: String): GameContent {
-        memory?.takeIf { it.version == version }?.let { return it }
-        return mutex.withLock {
-            memory?.takeIf { it.version == version }
-                ?: (readDisk()?.takeIf { it.version == version } ?: downloadOrStale(version))
-                    .also { memory = it }
-        }
-    }
-
-    /** A stale index still names almost everything, so prefer it to failing when valorant-api.com is down. */
-    private suspend fun downloadOrStale(version: String): GameContent = try {
-        download(version).also { writeDisk(it) }
-    } catch (e: IOException) {
-        readDisk() ?: throw e
-    }
-
-    private suspend fun download(version: String): GameContent = coroutineScope {
-        val agents = async { get<List<ApiAgent>>("https://valorant-api.com/v1/agents?isPlayableCharacter=true") }
-        val maps = async { get<List<ApiMap>>("https://valorant-api.com/v1/maps") }
-        val tiers = async { get<List<ApiTierTable>>("https://valorant-api.com/v1/competitivetiers") }
-        val seasons = async { get<List<ApiSeason>>("https://valorant-api.com/v1/seasons") }
-        val queues = async { get<List<ApiQueue>>("https://valorant-api.com/v1/gamemodes/queues") }
-        val weapons = async { get<List<ApiWeapon>>("https://valorant-api.com/v1/weapons") }
-        val titles = async { get<List<ApiTitle>>("https://valorant-api.com/v1/playertitles") }
-        val contracts = async { get<List<ApiContract>>("https://valorant-api.com/v1/contracts") }
-        withContext(Dispatchers.Default) {
-            buildGameContent(
-                version,
-                agents.await(),
-                maps.await(),
-                tiers.await(),
-                seasons.await(),
-                queues.await(),
-                weapons.await(),
-                titles.await(),
-                contracts.await(),
-            )
-        }
-    }
-
-    @OptIn(ExperimentalSerializationApi::class)
-    private suspend inline fun <reified T> get(url: String): T = withContext(Dispatchers.IO) {
-        http.newCall(Request.Builder().url(url).build()).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("HTTP ${response.code} from valorant-api.com")
-            json.decodeFromStream<ContentEnvelope<T>>(response.body.byteStream()).data
-        }
-    }
-
-    private suspend fun readDisk(): GameContent? = withContext(Dispatchers.IO) {
-        runCatching { json.decodeFromString<GameContent>(cacheFile.readText()) }.getOrNull()
-    }
-
-    private suspend fun writeDisk(content: GameContent) = withContext(Dispatchers.IO) {
-        val tmp = File(cacheFile.parentFile, cacheFile.name + ".tmp")
-        tmp.writeText(json.encodeToString(GameContent.serializer(), content))
-        tmp.renameTo(cacheFile)
-    }
-
-    @Serializable
-    private data class ContentEnvelope<T>(val data: T)
-}
-
 /** Player card art follows a fixed CDN path, so it needs no lookup. */
 object CardArt {
     fun wide(cardId: String?) = cardId?.takeIf { it.isNotBlank() }?.let { "https://media.valorant-api.com/playercards/$it/wideart.png" }
     fun small(cardId: String?) = cardId?.takeIf { it.isNotBlank() }?.let { "https://media.valorant-api.com/playercards/$it/smallart.png" }
+}
+
+/** Currency icons follow a fixed CDN path too. */
+object CurrencyArt {
+    fun icon(currencyUuid: String) = "https://media.valorant-api.com/currencies/$currencyUuid/displayicon.png"
 }

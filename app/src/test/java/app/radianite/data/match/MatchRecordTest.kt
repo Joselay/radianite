@@ -144,4 +144,39 @@ class MatchRecordTest {
 
         assertEquals(setOf("/game/maps/ascent/ascent", "/game/maps/bonsai/bonsai"), stats.maps.map { it.mapId }.toSet())
     }
+
+    @Test
+    fun `the scoreboard lists your team first, each side by score`() {
+        val boards = record().summaryFor("enemy")!!.scoreboard()
+
+        assertEquals(listOf("Red", "Blue"), boards.map { it.teamId })
+        assertEquals(listOf(true, false), boards.map { it.isMine })
+        assertEquals(listOf("me", "ally"), boards[1].players.map { it.puuid })
+        assertEquals(2, boards[1].team?.roundsWon)
+    }
+
+    @Test
+    fun `sides swap at half time, sooner in short modes`() {
+        assertEquals(12, record().halfRounds)
+        assertEquals(4, record().copy(queueId = "swiftplay").halfRounds)
+        assertEquals(3, record().copy(queueId = "spikerush").halfRounds)
+    }
+
+    @Test
+    fun `players Riot left unnamed go by their agent`() {
+        val me = record().player("me")!!
+        val nameless = me.copy(gameName = "")
+
+        assertEquals("Me", me.displayName(isMe = true, agentName = "Jett"))
+        assertEquals("You", nameless.displayName(isMe = true, agentName = "Jett"))
+        assertEquals("Jett", nameless.displayName(isMe = false, agentName = "Jett"))
+        assertEquals("Player", nameless.displayName(isMe = false, agentName = null))
+    }
+
+    @Test
+    fun `the RR trend reads oldest first and skips games without a time`() {
+        val trend = rrTrend(listOf(RankedRatingChange("b", 20, 16, 18), RankedRatingChange("a", 10, 15, -12), RankedRatingChange("x", 0, 15, 5)))
+
+        assertEquals(listOf("a", "b"), trend.map { it.matchId })
+    }
 }

@@ -41,6 +41,8 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.radianite.data.content.CurrencyArt
 import app.radianite.data.store.KINGDOM_CREDITS_UUID
 import app.radianite.data.store.RADIANITE_POINTS_UUID
 import app.radianite.data.store.StoreBundle
@@ -64,18 +66,20 @@ import kotlinx.coroutines.delay
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StoreScreen(
-    state: AppUiState.Store,
-    onRefresh: () -> Unit,
+    riotId: String,
+    viewModel: StoreViewModel,
     onSignOut: () -> Unit,
     onOpenSkin: (StoreSkin) -> Unit,
 ) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val onRefresh = viewModel::refresh
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
                         Text("Daily Store", fontWeight = FontWeight.Bold)
-                        Text(state.riotId, style = MaterialTheme.typography.labelMedium, color = Muted)
+                        Text(riotId, style = MaterialTheme.typography.labelMedium, color = Muted)
                     }
                 },
                 actions = { TextButton(onClick = onSignOut) { Text("Sign out", color = Muted) } },
@@ -180,7 +184,7 @@ private fun WalletRow(wallet: Wallet) {
 @Composable
 private fun Balance(currencyUuid: String, amount: Int) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        AsyncImage(model = "https://media.valorant-api.com/currencies/$currencyUuid/displayicon.png", contentDescription = null, modifier = Modifier.size(16.dp))
+        AsyncImage(model = CurrencyArt.icon(currencyUuid), contentDescription = null, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(6.dp))
         Text("%,d".format(amount), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 13.sp)
     }

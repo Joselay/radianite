@@ -2,8 +2,8 @@ package app.radianite.ui.skin
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.radianite.data.content.Content
 import app.radianite.data.content.SkinDetail
-import app.radianite.data.content.SkinDetailRepository
 import app.radianite.data.content.SkinVariant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,7 +19,7 @@ sealed interface SkinDetailUiState {
 }
 
 class SkinDetailViewModel(
-    private val repository: SkinDetailRepository,
+    private val content: Content,
     private val skinUuid: String,
 ) : ViewModel() {
     private val _state = MutableStateFlow<SkinDetailUiState>(SkinDetailUiState.Loading)
@@ -33,7 +33,7 @@ class SkinDetailViewModel(
         _state.value = SkinDetailUiState.Loading
         viewModelScope.launch {
             _state.value = try {
-                val detail = repository.detail(skinUuid)
+                val detail = content.skinDetail(skinUuid)
                 val first = detail.levels.firstOrNull { it.videoUrl != null }
                     ?: detail.levels.firstOrNull()
                     ?: detail.chromas.first()

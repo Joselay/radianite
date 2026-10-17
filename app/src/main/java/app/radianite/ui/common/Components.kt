@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +34,9 @@ import app.radianite.ui.theme.Muted
 import app.radianite.ui.theme.ValorantRed
 import app.radianite.ui.theme.rgbaColor
 import coil3.compose.AsyncImage
+
+/** The current patch's names and art, from the Content module; null until it first loads. */
+val LocalGameContent = compositionLocalOf<GameContent?> { null }
 
 val WinGreen = Color(0xFF3DDC97)
 val DrawGrey = Color(0xFFB0B8B4)
@@ -109,8 +113,8 @@ fun StatTile(
 }
 
 @Composable
-fun AgentIcon(content: GameContent?, agentId: String?, size: Dp, modifier: Modifier = Modifier) {
-    val agent = content?.agent(agentId)
+fun AgentIcon(agentId: String?, size: Dp, modifier: Modifier = Modifier) {
+    val agent = LocalGameContent.current?.agent(agentId)
     AsyncImage(
         model = agent?.icon,
         contentDescription = agent?.name,
@@ -122,15 +126,15 @@ fun AgentIcon(content: GameContent?, agentId: String?, size: Dp, modifier: Modif
 }
 
 @Composable
-fun RankIcon(content: GameContent?, tier: Int, size: Dp, modifier: Modifier = Modifier) {
-    val rank = content?.rank(tier)
+fun RankIcon(tier: Int, size: Dp, modifier: Modifier = Modifier) {
+    val rank = LocalGameContent.current?.rank(tier)
     AsyncImage(model = rank?.icon, contentDescription = rank?.name, modifier = modifier.size(size))
 }
 
 /** Rank name in its tier color, e.g. "DIAMOND 2". */
 @Composable
-fun RankName(content: GameContent?, tier: Int, fontSize: Int = 14) {
-    val rank = content?.rank(tier)
+fun RankName(tier: Int, fontSize: Int = 14) {
+    val rank = LocalGameContent.current?.rank(tier)
     val color = remember(rank) { rgbaColor(rank?.color)?.copy(alpha = 1f) ?: Muted }
     Text(rank?.name ?: "UNRANKED", fontFamily = Display, fontSize = fontSize.sp, color = color, fontWeight = FontWeight.Normal)
 }

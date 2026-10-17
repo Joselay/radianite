@@ -14,9 +14,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -43,16 +43,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.radianite.data.content.CardArt
-import app.radianite.data.content.GameContent
 import app.radianite.data.match.CareerStats
+import app.radianite.data.match.RankedRatingChange
 import app.radianite.data.player.ActRank
 import app.radianite.data.player.BattlePassProgress
 import app.radianite.data.player.Career
+import app.radianite.data.player.RR_PER_TIER
 import app.radianite.data.player.RankStatus
 import app.radianite.data.player.XP_PER_ACCOUNT_LEVEL
-import app.radianite.data.riot.CompetitiveUpdate
 import app.radianite.ui.VersionLabel
 import app.radianite.ui.common.AgentIcon
+import app.radianite.ui.common.LocalGameContent
 import app.radianite.ui.common.MessageBanner
 import app.radianite.ui.common.ProgressBar
 import app.radianite.ui.common.RankIcon
@@ -75,7 +76,6 @@ import coil3.compose.AsyncImage
 @Composable
 fun CareerScreen(viewModel: CareerViewModel, onOpenLeaderboard: () -> Unit, onSignOut: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val content = state.content
 
     Scaffold(
         topBar = {
@@ -105,12 +105,12 @@ fun CareerScreen(viewModel: CareerViewModel, onOpenLeaderboard: () -> Unit, onSi
                 state.career?.let { career ->
                     IdentityBanner(career)
                     AccountProgress(career)
-                    career.rank?.let { RankCard(it, content, onOpenLeaderboard) }
+                    career.rank?.let { RankCard(it, onOpenLeaderboard) }
                     if (career.rrTrend.size >= 2) RrTrend(career.rrTrend)
                 }
-                RecentStats(state.stats, state.statsLoading, content)
+                RecentStats(state.stats, state.statsLoading)
                 state.career?.let { career ->
-                    if (career.actHistory.isNotEmpty()) ActHistory(career.actHistory, content)
+                    if (career.actHistory.isNotEmpty()) ActHistory(career.actHistory)
                     career.battlePass?.let { BattlePass(it) }
                     if (career.rank == null) {
                         TextButton(onClick = onOpenLeaderboard) { Text("View the leaderboard", color = ValorantRed) }
@@ -170,7 +170,7 @@ private fun AccountProgress(career: Career) {
             Text("%,d / %,d".format(career.xpIntoLevel, XP_PER_ACCOUNT_LEVEL), fontFamily = Mono, fontSize = 10.sp, color = Muted)
         }
         Spacer(Modifier.height(4.dp))
-        ProgressBar(career.xpIntoLevel / XP_PER_ACCOUNT_LEVEL.toFloat(), ValorantRed)
+        ProgressBar(career.levelProgress, ValorantRed)
         career.nextFirstWinMillis?.let { next ->
             val remaining = next - System.currentTimeMillis()
             Text(
@@ -184,7 +184,8 @@ private fun AccountProgress(career: Career) {
 }
 
 @Composable
-private fun RankCard(rank: RankStatus, content: GameContent?, onOpenLeaderboard: () -> Unit) {
+private fun RankCard(rank: RankStatus, onOpenLeaderboard: () -> Unit) {
+    val content = LocalGameContent.current
     val color = remember(rank.tier, content) { rgbaColor(content?.rank(rank.tier)?.color)?.copy(alpha = 1f) ?: Muted }
     Column {
         SectionHeader("COMPETITIVE" + (rank.actName?.let { " · $it" } ?: ""))
@@ -196,17 +197,16 @@ private fun RankCard(rank: RankStatus, content: GameContent?, onOpenLeaderboard:
                 .padding(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                RankIcon(content, rank.tier, 64.dp)
+                RankIcon(rank.tier, 64.dp)
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
-                    RankName(content, rank.tier, fontSize = 26)
-                    if (rank.tier >= IMMORTAL_1) {
-                        // Immortal and Radiant RR is uncapped, so there's no bar to fill.
-                        Text("${rank.rankedRating} RR", fontFamily = Mono, fontWeight = FontWeight.Bold)
-                    } else {
-                        Text("${rank.rankedRating} / 100 RR", fontFamily = Mono, fontSize = 12.sp, color = Muted)
+                    RankName(rank.tier, fontSize = 26)
+                    if (rank.rrCapped) {
+                        Text("${rank.rankedRating} / $RR_PER_TIER RR", fontFamily = Mono, fontSize = 12.sp, color = Muted)
                         Spacer(Modifier.height(4.dp))
-                        ProgressBar(rank.rankedRating / 100f, color)
+                        ProgressBar(rank.rankedRating / RR_PER_TIER.toFloat(), color)
+                    } else {
+                        Text("${rank.rankedRating} RR", fontFamily = Mono, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -232,7 +232,7 @@ private fun RankCard(rank: RankStatus, content: GameContent?, onOpenLeaderboard:
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                 ) {
                     Text("ACT PEAK", fontFamily = Mono, fontSize = 10.sp, color = Muted)
-                    RankIcon(content, rank.peakTier, 29.dp)
+                    RankIcon(rank.peakTier, 29.dp)
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
@@ -249,7 +249,7 @@ private fun RankCard(rank: RankStatus, content: GameContent?, onOpenLeaderboard:
 
 /** Bars for each recent ranked game's RR change, oldest on the left. */
 @Composable
-private fun RrTrend(trend: List<CompetitiveUpdate>) {
+private fun RrTrend(trend: List<RankedRatingChange>) {
     val total = trend.sumOf { it.rrEarned }
     Column {
         Row(verticalAlignment = Alignment.Bottom) {
@@ -289,7 +289,8 @@ private fun RrTrend(trend: List<CompetitiveUpdate>) {
 }
 
 @Composable
-private fun RecentStats(stats: CareerStats?, loading: Boolean, content: GameContent?) {
+private fun RecentStats(stats: CareerStats?, loading: Boolean) {
+    val content = LocalGameContent.current
     Column {
         SectionHeader("RECENT FORM" + (stats?.takeIf { it.matches > 0 }?.let { " · LAST ${it.matches} MATCHES" } ?: ""))
         when {
@@ -321,7 +322,7 @@ private fun RecentStats(stats: CareerStats?, loading: Boolean, content: GameCont
                                 .background(InkRaised)
                                 .padding(8.dp),
                         ) {
-                            AgentIcon(content, agent.agentId, 36.dp)
+                            AgentIcon(agent.agentId, 36.dp)
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(content?.agent(agent.agentId)?.name ?: "Agent", fontWeight = FontWeight.SemiBold)
@@ -356,7 +357,8 @@ private fun RecentStats(stats: CareerStats?, loading: Boolean, content: GameCont
 }
 
 @Composable
-private fun ActHistory(acts: List<ActRank>, content: GameContent?) {
+private fun ActHistory(acts: List<ActRank>) {
+    val content = LocalGameContent.current
     Column {
         SectionHeader("ACT RANKS")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -369,7 +371,7 @@ private fun ActHistory(acts: List<ActRank>, content: GameContent?) {
                         .background(InkRaised)
                         .padding(8.dp),
                 ) {
-                    RankIcon(content, act.peakTier, 40.dp)
+                    RankIcon(act.peakTier, 40.dp)
                     Text(content?.rank(act.peakTier)?.name ?: "UNRANKED", fontFamily = Mono, fontSize = 9.sp, maxLines = 1)
                     Text(act.actName, fontSize = 10.sp, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("${act.wins}W / ${act.games}G", fontFamily = Mono, fontSize = 9.sp, color = Muted)
@@ -410,5 +412,3 @@ private fun BattlePass(pass: BattlePassProgress) {
         }
     }
 }
-
-private const val IMMORTAL_1 = 24

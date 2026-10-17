@@ -43,6 +43,11 @@ android {
         compose = true
         buildConfig = true
     }
+
+    // Data modules log best-effort failures with android.util.Log; in JVM tests that's a no-op.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {

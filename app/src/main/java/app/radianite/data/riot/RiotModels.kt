@@ -117,6 +117,10 @@ class RiotHttpException(
     val isAuthError: Boolean
         get() = status == 401 || status == 403 || errorCode == "BAD_CLAIMS" || errorCode == "TOKEN_EXPIRED"
 
+    /** Narrower than [isAuthError]: a 403 alone can mean an endpoint is off-limits rather than bad tokens. */
+    val isTokenRejected: Boolean
+        get() = status == 401 || errorCode == "BAD_CLAIMS" || errorCode == "TOKEN_EXPIRED"
+
     val isMaintenance: Boolean
         get() = status == 503 || errorCode == "SCHEDULED_DOWNTIME"
 }

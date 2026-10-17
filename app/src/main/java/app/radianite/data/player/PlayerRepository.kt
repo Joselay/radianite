@@ -1,18 +1,15 @@
 package app.radianite.data.player
 
-import android.util.Log
-import app.radianite.data.content.Catalog
-import app.radianite.data.content.GameContent
-import app.radianite.data.content.GameContentRepository
-import app.radianite.data.content.SkinCatalogRepository
-import app.radianite.data.riot.CompetitiveUpdate
+import app.radianite.data.content.Content
+import app.radianite.data.match.MatchHistory
+import app.radianite.data.match.RankedRatingChange
+import app.radianite.data.match.rrTrend
+import app.radianite.data.optional
 import app.radianite.data.riot.ItemTypes
 import app.radianite.data.riot.LeaderboardPlayer
-import app.radianite.data.riot.RiotApi
-import app.radianite.data.riot.SessionExpiredException
-import app.radianite.data.riot.SessionManager
+import app.radianite.data.riot.RiotPlayerData
 import app.radianite.data.store.StoreSkin
-import kotlinx.coroutines.CancellationException
+import app.radianite.data.store.storeSkin
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import java.time.Instant
@@ -27,9 +24,11 @@ data class Career(
     val nextFirstWinMillis: Long?,
     val rank: RankStatus?,
     val actHistory: List<ActRank>,
-    val rrTrend: List<CompetitiveUpdate>,
+    val rrTrend: List<RankedRatingChange>,
     val battlePass: BattlePassProgress?,
-)
+) {
+    val levelProgress: Float get() = xpIntoLevel / XP_PER_ACCOUNT_LEVEL.toFloat()
+}
 
 data class EquippedWeapon(val weaponId: String, val weaponName: String, val category: String, val skin: StoreSkin?)
 
@@ -39,37 +38,49 @@ data class PlayerCollection(
     val skins: List<StoreSkin>,
     val ownedAgents: Int?,
     val totalAgents: Int,
+) {
+    fun search(query: String): List<StoreSkin> = query.trim().let { q -> if (q.isEmpty()) skins else skins.filter { it.name.contains(q, ignoreCase = true) } }
+}
+
+data class Leaderboard(val actName: String?, val totalPlayers: Int, val players: List<LeaderboardEntry>)
+
+data class LeaderboardEntry(val rank: Int, val name: String, val cardId: String, val rankedRating: Int, val wins: Int, val tier: Int)
+
+fun LeaderboardPlayer.toEntry() = LeaderboardEntry(
+    rank = leaderboardRank,
+    // Players can hide their name from the leaderboard.
+    name = if (isAnonymized || gameName.isBlank()) "Secret Agent" else "$gameName#$tagLine",
+    cardId = playerCardId,
+    rankedRating = rankedRating,
+    wins = numberOfWins,
+    tier = competitiveTier,
 )
 
-data class Leaderboard(val actName: String?, val totalPlayers: Int, val players: List<LeaderboardPlayer>)
-
+/** The signed-in player's career, collection and the leaderboard they compete on. */
 class PlayerRepository(
-    private val riot: RiotApi,
-    private val sessions: SessionManager,
-    private val contentRepository: GameContentRepository,
-    private val catalogRepository: SkinCatalogRepository,
+    private val riot: RiotPlayerData,
+    private val content: Content,
+    private val matches: MatchHistory,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    suspend fun content(): GameContent = contentRepository.content(sessions.clientVersion())
-
     /**
      * Each section loads independently: an endpoint Riot has changed or rate-limited hides its section
      * instead of failing the whole screen.
      */
     suspend fun career(): Career = coroutineScope {
-        val content = async { content() }
-        val mmr = async { optional { sessions.call { s, v -> riot.playerMmr(s, v) } } }
-        val xp = async { optional { sessions.call { s, v -> riot.accountXp(s, v) } } }
-        val loadout = async { optional { sessions.call { s, v -> riot.playerLoadout(s, v) } } }
-        val contracts = async { optional { sessions.call { s, v -> riot.contracts(s, v) } } }
-        val updates = async { optional { sessions.call { s, v -> riot.competitiveUpdates(s, v, 20) } } }
+        val game = async { content.gameContent() }
+        val mmr = async { optional("Rank") { riot.playerMmr() } }
+        val xp = async { optional("Account XP") { riot.accountXp() } }
+        val loadout = async { optional("Loadout") { riot.playerLoadout() } }
+        val contracts = async { optional("Contracts") { riot.contracts() } }
+        val rr = async { optional("RR trend") { matches.rankedRatingChanges() } }
 
-        val c = content.await()
+        val c = game.await()
         val now = clock()
         val identity = loadout.await()?.identity
         val progress = xp.await()
-        val riotId = sessions.savedSession()?.riotId.orEmpty()
-        if (listOf(mmr, xp, loadout, contracts, updates).all { it.await() == null }) {
+        val riotId = riot.savedSession()?.riotId.orEmpty()
+        if (listOf(mmr, xp, loadout, contracts, rr).all { it.await() == null }) {
             throw IllegalStateException("Couldn't load your career from Riot.")
         }
         Career(
@@ -81,19 +92,19 @@ class PlayerRepository(
             nextFirstWinMillis = progress?.nextTimeFirstWinAvailable?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() },
             rank = mmr.await()?.let { rankStatus(it, c, now) },
             actHistory = mmr.await()?.let { actHistory(it, c) }.orEmpty(),
-            rrTrend = rrTrend(updates.await()?.matches.orEmpty()),
+            rrTrend = rrTrend(rr.await().orEmpty()),
             battlePass = contracts.await()?.let { battlePass(it, c, now) },
         )
     }
 
     suspend fun collection(): PlayerCollection = coroutineScope {
-        val content = async { content() }
-        val catalog = async { catalogRepository.catalog(sessions.clientVersion()) }
-        val loadout = async { sessions.call { s, v -> riot.playerLoadout(s, v) } }
-        val skins = async { optional { sessions.call { s, v -> riot.ownedItems(s, v, ItemTypes.SKIN_LEVELS) } } }
-        val agents = async { optional { sessions.call { s, v -> riot.ownedItems(s, v, ItemTypes.AGENTS) } } }
+        val game = async { content.gameContent() }
+        val catalog = async { content.catalog() }
+        val loadout = async { riot.playerLoadout() }
+        val skins = async { optional("Owned skins") { riot.ownedItems(ItemTypes.SKIN_LEVELS) } }
+        val agents = async { optional("Owned agents") { riot.ownedItems(ItemTypes.AGENTS) } }
 
-        val c = content.await()
+        val c = game.await()
         val cat = catalog.await()
         val ownedAgentIds = agents.await()?.itemIds
         PlayerCollection(
@@ -116,42 +127,12 @@ class PlayerRepository(
     }
 
     suspend fun leaderboard(query: String?): Leaderboard {
-        val act = content().currentAct(clock()) ?: throw IllegalStateException("The current act isn't known yet.")
-        val response = sessions.call { s, v -> riot.leaderboard(s, v, act.uuid, startIndex = 0, size = 200, query = query) }
-        return Leaderboard(act.name, response.totalPlayers, response.players)
-    }
-
-    private fun Catalog.storeSkin(levelUuid: String): StoreSkin? {
-        val key = levelUuid.lowercase()
-        val skin = skinsByLevel[key] ?: return null
-        val tier = skin.tierUuid?.let { tiers[it.lowercase()] }
-        return StoreSkin(
-            levelUuid = key,
-            skinUuid = skin.skinUuid,
-            name = skin.name,
-            iconUrl = skin.icon,
-            priceVp = null,
-            tierName = tier?.name,
-            tierColor = tier?.color,
-            tierIconUrl = tier?.icon,
-        )
-    }
-
-    /** Null on failure, except for cancellation and an expired session, which the caller must see. */
-    private suspend fun <T> optional(block: suspend () -> T): T? = try {
-        block()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: SessionExpiredException) {
-        throw e
-    } catch (e: Exception) {
-        Log.w(TAG, "Career section unavailable", e)
-        null
+        val act = content.gameContent().currentAct(clock()) ?: throw IllegalStateException("The current act isn't known yet.")
+        val response = riot.leaderboard(act.uuid, startIndex = 0, size = 200, query = query)
+        return Leaderboard(act.name, response.totalPlayers, response.players.map { it.toEntry() })
     }
 
     private companion object {
-        const val TAG = "PlayerRepository"
-
         /** The in-game loadout order. */
         val CATEGORY_ORDER = listOf("Sidearm", "SMG", "Shotgun", "Rifle", "Sniper", "Heavy", "Melee")
     }

@@ -15,12 +15,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import app.radianite.ui.AppUiState
+import app.radianite.ui.AppViewModel
 import app.radianite.ui.home.HomeScreen
 import app.radianite.ui.signin.CompletingSignInScreen
 import app.radianite.ui.signin.RiotSignInScreen
 import app.radianite.ui.signin.SignedOutScreen
-import app.radianite.ui.store.AppUiState
-import app.radianite.ui.store.StoreViewModel
 import app.radianite.ui.theme.RadianiteTheme
 
 class MainActivity : ComponentActivity() {
@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             RadianiteTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    RadianiteRoot(container, viewModel { StoreViewModel(container.sessions, container.storeRepository) })
+                    RadianiteRoot(container, viewModel { AppViewModel(container.account, container.store) })
                 }
             }
         }
@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun RadianiteRoot(container: AppContainer, viewModel: StoreViewModel) {
+private fun RadianiteRoot(container: AppContainer, viewModel: AppViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val featuredBundles by viewModel.featuredBundles.collectAsStateWithLifecycle()
     when (val s = state) {
@@ -47,6 +47,6 @@ private fun RadianiteRoot(container: AppContainer, viewModel: StoreViewModel) {
         is AppUiState.SignedOut -> SignedOutScreen(s.message, featuredBundles, onSignIn = viewModel::startSignIn)
         AppUiState.SigningIn -> RiotSignInScreen(onTokens = viewModel::onSignInRedirect, onCancel = viewModel::cancelSignIn)
         AppUiState.CompletingSignIn -> CompletingSignInScreen()
-        is AppUiState.Store -> HomeScreen(container, s, onRefreshStore = viewModel::refresh, onSignOut = viewModel::signOut)
+        is AppUiState.SignedIn -> HomeScreen(container, s, onSignOut = viewModel::signOut)
     }
 }

@@ -24,6 +24,14 @@ data class MatchRecord(
     /** Deathmatch-style modes put every player on their own team. */
     val isTeamMode: Boolean get() = teams.size == 2
 
+    /** Rounds before sides swap. */
+    val halfRounds: Int
+        get() = when (queueId) {
+            "swiftplay" -> 4
+            "spikerush" -> 3
+            else -> 12
+        }
+
     fun player(puuid: String): PlayerRecord? = players.find { it.puuid == puuid }
 }
 
@@ -64,6 +72,16 @@ data class PlayerRecord(
             val shots = headshots + bodyshots + legshots
             return if (shots > 0) headshots * 100 / shots else null
         }
+
+    /** Riot leaves names out of match details now. */
+    val hasName: Boolean get() = gameName.isNotBlank()
+
+    /** Nameless rows go by agent, as the game's own history does. */
+    fun displayName(isMe: Boolean, agentName: String?): String = when {
+        hasName -> gameName
+        isMe -> "You"
+        else -> agentName ?: "Player"
+    }
 }
 
 /** [resultCode] is Elimination, Detonate, Defuse, Surrendered, or "" when the timer ran out. */
@@ -149,7 +167,26 @@ data class MatchSummary(
     val outcome: Outcome,
     /** "13–9" for team modes; "#3" placement for free-for-all. */
     val scoreLine: String,
-)
+    /** How the game moved the player's rank, for recent competitive games. */
+    val rr: RankedRatingChange? = null,
+) {
+    val myTeamId: String? get() = record.teams.find { it.teamId == me.teamId }?.teamId
+
+    /** Your team first; free-for-all lists everyone together. Players are ordered by score. */
+    fun scoreboard(): List<TeamBoard> =
+        if (record.isTeamMode) {
+            record.players.groupBy { it.teamId }.entries
+                .sortedByDescending { it.key == myTeamId }
+                .map { (teamId, players) ->
+                    TeamBoard(teamId, record.teams.find { it.teamId == teamId }, isMine = teamId == myTeamId, players.sortedByDescending { it.score })
+                }
+        } else {
+            listOf(TeamBoard("", team = null, isMine = false, record.players.sortedByDescending { it.score }))
+        }
+}
+
+/** One side of the scoreboard; [team] is null for free-for-all. */
+data class TeamBoard(val teamId: String, val team: TeamRecord?, val isMine: Boolean, val players: List<PlayerRecord>)
 
 fun MatchRecord.summaryFor(puuid: String): MatchSummary? {
     val me = player(puuid) ?: return null

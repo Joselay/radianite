@@ -49,18 +49,16 @@ import androidx.lifecycle.viewModelScope
 import app.radianite.data.player.EquippedWeapon
 import app.radianite.data.player.PlayerCollection
 import app.radianite.data.player.PlayerRepository
-import app.radianite.data.riot.SessionExpiredException
 import app.radianite.data.store.StoreSkin
 import app.radianite.ui.common.MessageBanner
 import app.radianite.ui.common.SectionHeader
 import app.radianite.ui.common.StatTile
-import app.radianite.ui.store.toUserMessage
+import app.radianite.ui.common.loadReporting
 import app.radianite.ui.theme.InkRaised
 import app.radianite.ui.theme.Mono
 import app.radianite.ui.theme.Muted
 import app.radianite.ui.theme.rgbaColor
 import coil3.compose.AsyncImage
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -88,15 +86,9 @@ class CollectionViewModel(private val repository: PlayerRepository) : ViewModel(
         job?.cancel()
         job = viewModelScope.launch {
             _state.update { it.copy(refreshing = true, message = null) }
-            try {
+            loadReporting({ message -> _state.update { it.copy(refreshing = false, message = message) } }) {
                 val collection = repository.collection()
                 _state.update { it.copy(collection = collection, refreshing = false) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: SessionExpiredException) {
-                // The app returns to sign-in.
-            } catch (e: Exception) {
-                _state.update { it.copy(refreshing = false, message = e.toUserMessage()) }
             }
         }
     }
@@ -108,9 +100,7 @@ fun CollectionScreen(viewModel: CollectionViewModel, onOpenSkin: (StoreSkin) -> 
     val state by viewModel.state.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
     val collection = state.collection
-    val skins = remember(collection, query) {
-        collection?.skins.orEmpty().filter { query.isBlank() || it.name.contains(query.trim(), ignoreCase = true) }
-    }
+    val skins = remember(collection, query) { collection?.search(query).orEmpty() }
 
     Scaffold(
         topBar = {

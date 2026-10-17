@@ -90,17 +90,30 @@ fun StorefrontResponse.toDailyStore(puuid: String, catalog: Catalog, nowMillis: 
 }
 
 private fun StoreOffer.toStoreSkin(catalog: Catalog, priceVp: Int?): StoreSkin {
-    val levelUuid = (rewards.firstOrNull()?.itemId ?: offerId).lowercase()
-    val skin = catalog.skinsByLevel[levelUuid]
-    val tier = skin?.tierUuid?.let { catalog.tiers[it.lowercase()] }
+    val levelUuid = rewards.firstOrNull()?.itemId ?: offerId
+    return catalog.storeSkin(levelUuid, priceVp)
+        ?: StoreSkin(levelUuid.lowercase(), name = "Unknown skin", iconUrl = null, priceVp = priceVp, tierName = null, tierColor = null, tierIconUrl = null)
+}
+
+/** A skin level as the app shows it, or null when the catalog doesn't know it. [priceVp] is null outside the store. */
+fun Catalog.storeSkin(levelUuid: String, priceVp: Int? = null): StoreSkin? {
+    val key = levelUuid.lowercase()
+    val skin = skinsByLevel[key] ?: return null
+    val tier = skin.tierUuid?.let { tiers[it.lowercase()] }
     return StoreSkin(
-        levelUuid = levelUuid,
-        skinUuid = skin?.skinUuid,
-        name = skin?.name ?: "Unknown skin",
-        iconUrl = skin?.icon,
+        levelUuid = key,
+        skinUuid = skin.skinUuid,
+        name = skin.name,
+        iconUrl = skin.icon,
         priceVp = priceVp,
         tierName = tier?.name,
         tierColor = tier?.color,
         tierIconUrl = tier?.icon,
     )
+}
+
+/** Daily offers roll over at 00:00 UTC. */
+fun millisUntilStoreReset(nowMillis: Long): Long {
+    val day = 24L * 60 * 60 * 1000
+    return day - nowMillis % day
 }

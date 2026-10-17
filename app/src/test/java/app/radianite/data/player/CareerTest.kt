@@ -4,10 +4,14 @@ import app.radianite.data.content.ActInfo
 import app.radianite.data.content.BattlePassInfo
 import app.radianite.data.content.GameContent
 import app.radianite.data.riot.ContractsResponse
+import app.radianite.data.riot.LeaderboardPlayer
 import app.radianite.data.riot.PlayerMmrResponse
+import app.radianite.data.store.StoreSkin
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CareerTest {
@@ -106,5 +110,29 @@ class CareerTest {
         val oldOnly = ContractsResponse(contracts.contracts.take(1))
         assertEquals("Old pass", battlePass(oldOnly, content, nowMillis = 150)!!.name)
         assertNull(battlePass(ContractsResponse(), content, nowMillis = 150))
+    }
+
+    @Test
+    fun `ranked rating is capped below Immortal`() {
+        val diamond = rankStatus(mmr, content, nowMillis = 150)!!
+        assertTrue(diamond.rrCapped)
+        assertFalse(diamond.copy(tier = IMMORTAL_1).rrCapped)
+    }
+
+    @Test
+    fun `hidden leaderboard players show as Secret Agent`() {
+        val named = LeaderboardPlayer(gameName = "TenZ", tagLine = "0505", leaderboardRank = 1, competitiveTier = 27)
+        assertEquals("TenZ#0505", named.toEntry().name)
+        assertEquals("Secret Agent", named.copy(isAnonymized = true).toEntry().name)
+        assertEquals(27, named.toEntry().tier)
+    }
+
+    @Test
+    fun `collection search matches skin names loosely`() {
+        fun skin(name: String) = StoreSkin(name.lowercase(), name = name, iconUrl = null, priceVp = null, tierName = null, tierColor = null, tierIconUrl = null)
+        val collection = PlayerCollection(emptyList(), listOf(skin("Reaver Vandal"), skin("Prime Vandal"), skin("Glitchpop Phantom")), ownedAgents = null, totalAgents = 0)
+
+        assertEquals(listOf("Reaver Vandal", "Prime Vandal"), collection.search(" vandal ").map { it.name })
+        assertEquals(3, collection.search("").size)
     }
 }

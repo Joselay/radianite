@@ -2,16 +2,12 @@ package app.radianite.ui.matches
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import app.radianite.data.content.GameContent
 import app.radianite.data.match.LiveMatch
-import app.radianite.data.match.MatchRecord
-import app.radianite.data.match.MatchRepository
+import app.radianite.data.match.MatchHistory
+import app.radianite.data.match.MatchPage
 import app.radianite.data.match.MatchSummary
-import app.radianite.data.match.summaryFor
-import app.radianite.data.riot.CompetitiveUpdate
-import app.radianite.data.riot.SessionExpiredException
-import app.radianite.ui.store.toUserMessage
-import kotlinx.coroutines.CancellationException
+import app.radianite.data.optional
+import app.radianite.ui.common.loadReporting
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -22,10 +18,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class MatchesUiState(
-    val content: GameContent? = null,
     val matches: List<MatchSummary> = emptyList(),
-    /** Ranked rating change per match ID, for competitive games. */
-    val rrChanges: Map<String, CompetitiveUpdate> = emptyMap(),
     val live: LiveMatch? = null,
     val refreshing: Boolean = true,
     val loadingMore: Boolean = false,
@@ -33,12 +26,10 @@ data class MatchesUiState(
     val message: String? = null,
 )
 
-class MatchesViewModel(private val repository: MatchRepository) : ViewModel() {
+class MatchesViewModel(private val history: MatchHistory) : ViewModel() {
     private val _state = MutableStateFlow(MatchesUiState())
     val state: StateFlow<MatchesUiState> = _state.asStateFlow()
 
-    /** How far into the history we've paged; separate from matches.size since unloadable matches are skipped. */
-    private var nextIndex = 0
     private var job: Job? = null
 
     init {
@@ -48,25 +39,13 @@ class MatchesViewModel(private val repository: MatchRepository) : ViewModel() {
     fun refresh() {
         job?.cancel()
         job = viewModelScope.launch {
-            _state.update { it.copy(refreshing = true, message = null) }
+            // A refresh replaces any page still loading, so its spinner goes too.
+            _state.update { it.copy(refreshing = true, loadingMore = false, message = null) }
             load {
                 coroutineScope {
-                    val content = async { repository.content() }
-                    val live = async { optional { repository.liveMatch() } }
-                    val rr = async { optional { repository.rankedRatingChanges() }.orEmpty() }
-                    val entries = repository.history(0, PAGE_SIZE)
-                    val summaries = summarize(repository.records(entries))
-                    nextIndex = entries.size
-                    _state.update {
-                        it.copy(
-                            content = content.await(),
-                            matches = summaries,
-                            rrChanges = rr.await(),
-                            live = live.await(),
-                            refreshing = false,
-                            endReached = entries.size < PAGE_SIZE,
-                        )
-                    }
+                    val live = async { optional("Live match") { history.liveMatch() } }
+                    val page = history.firstPage()
+                    _state.update { it.withPage(page).copy(live = live.await(), refreshing = false) }
                 }
             }
         }
@@ -78,16 +57,8 @@ class MatchesViewModel(private val repository: MatchRepository) : ViewModel() {
         job = viewModelScope.launch {
             _state.update { it.copy(loadingMore = true, message = null) }
             load {
-                val entries = repository.history(nextIndex, PAGE_SIZE)
-                val summaries = summarize(repository.records(entries))
-                nextIndex += entries.size
-                _state.update {
-                    it.copy(
-                        matches = (it.matches + summaries).distinctBy { m -> m.record.matchId },
-                        loadingMore = false,
-                        endReached = entries.size < PAGE_SIZE,
-                    )
-                }
+                val page = history.nextPage()
+                _state.update { it.withPage(page).copy(loadingMore = false) }
             }
         }
     }
@@ -96,37 +67,15 @@ class MatchesViewModel(private val repository: MatchRepository) : ViewModel() {
     fun refreshLive() {
         if (job?.isActive == true) return
         viewModelScope.launch {
-            val live = optional { repository.liveMatch() }
-            _state.update { it.copy(live = live) }
+            loadReporting({ /* The next poll tries again. */ }) {
+                val live = optional("Live match") { history.liveMatch() }
+                _state.update { it.copy(live = live) }
+            }
         }
     }
 
-    private suspend fun summarize(records: List<MatchRecord>): List<MatchSummary> {
-        val puuid = repository.puuid() ?: return emptyList()
-        return records.mapNotNull { it.summaryFor(puuid) }.sortedByDescending { it.record.startMillis }
-    }
+    private fun MatchesUiState.withPage(page: MatchPage) = copy(matches = page.matches, endReached = page.endReached)
 
-    private suspend fun load(block: suspend () -> Unit) {
-        try {
-            block()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: SessionExpiredException) {
-            // The app returns to sign-in.
-        } catch (e: Exception) {
-            _state.update { it.copy(refreshing = false, loadingMore = false, message = e.toUserMessage()) }
-        }
-    }
-
-    private suspend fun <T> optional(block: suspend () -> T): T? = try {
-        block()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        null
-    }
-
-    private companion object {
-        const val PAGE_SIZE = 10
-    }
+    private suspend fun load(block: suspend () -> Unit) =
+        loadReporting({ message -> _state.update { it.copy(refreshing = false, loadingMore = false, message = message) } }, block)
 }

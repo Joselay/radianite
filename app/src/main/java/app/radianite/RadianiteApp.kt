@@ -15,23 +15,23 @@ import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import app.radianite.data.AppFiles
-import app.radianite.data.content.GameContentRepository
-import app.radianite.data.content.SkinCatalogRepository
-import app.radianite.data.content.SkinDetailRepository
-import app.radianite.data.match.MatchRepository
+import app.radianite.data.LocalStore
+import app.radianite.data.account.Account
+import app.radianite.data.content.Content
+import app.radianite.data.match.MatchHistory
 import app.radianite.data.player.PlayerRepository
-import app.radianite.data.riot.RiotApi
 import app.radianite.data.riot.RiotAuth
 import app.radianite.data.riot.RiotCookies
-import app.radianite.data.riot.SessionManager
+import app.radianite.data.riot.RiotPlayerData
 import app.radianite.data.store.StoreRepository
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -75,28 +75,29 @@ class AppContainer(context: Context) {
             .build()
     }
 
-    private val riot by lazy { RiotApi(http, json) }
-    private val files by lazy { AppFiles(appContext.filesDir, json) }
-    private val catalog by lazy { SkinCatalogRepository(http, json, File(appContext.filesDir, "skin_catalog.json")) }
-    private val gameContent by lazy { GameContentRepository(http, json, File(appContext.filesDir, "game_content.json")) }
+    private val local by lazy { LocalStore(appContext.filesDir, json) }
+    private val cookies = WebViewRiotCookies()
 
-    val sessions: SessionManager by lazy {
-        SessionManager(
-            riot = riot,
-            cookies = WebViewRiotCookies(),
-            files = files,
+    val content: Content by lazy { Content(http, json, local) }
+
+    private val riot: RiotPlayerData by lazy {
+        RiotPlayerData(
+            http = http,
+            json = json,
+            cookies = cookies,
+            store = local,
             userAgent = { WebSettings.getDefaultUserAgent(appContext) },
-            fetchClientVersion = catalog::clientVersion,
+            clientVersion = content::version,
         )
     }
 
-    val storeRepository: StoreRepository by lazy { StoreRepository(riot, sessions, catalog, files) }
+    val account: Account by lazy { Account(riot, cookies, local, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)) }
 
-    val matchRepository: MatchRepository by lazy { MatchRepository(riot, sessions, gameContent, files) }
+    val store: StoreRepository by lazy { StoreRepository(riot, content, local) }
 
-    val playerRepository: PlayerRepository by lazy { PlayerRepository(riot, sessions, gameContent, catalog) }
+    val matches: MatchHistory by lazy { MatchHistory(riot, local) }
 
-    val skinDetailRepository: SkinDetailRepository by lazy { SkinDetailRepository(http, json) }
+    val players: PlayerRepository by lazy { PlayerRepository(riot, content, matches) }
 
     // SimpleCache must be a single instance per directory for the whole process.
     private val videoCache: SimpleCache by lazy {
@@ -129,6 +130,8 @@ private class WebViewRiotCookies : RiotCookies {
         setCookies.forEach { manager.setCookie(RiotAuth.COOKIE_URL, it) }
         manager.flush()
     }
+
+    override suspend fun flush() = withContext(Dispatchers.Main) { CookieManager.getInstance().flush() }
 
     override suspend fun clear() = withContext(Dispatchers.Main) {
         val manager = CookieManager.getInstance()

@@ -38,12 +38,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.radianite.data.content.GameContent
 import app.radianite.data.match.MatchSummary
 import app.radianite.data.match.PlayerRecord
 import app.radianite.data.match.RoundRecord
-import app.radianite.data.riot.CompetitiveUpdate
 import app.radianite.ui.common.AgentIcon
+import app.radianite.ui.common.LocalGameContent
 import app.radianite.ui.common.RankIcon
 import app.radianite.ui.common.SectionHeader
 import app.radianite.ui.common.StatTile
@@ -64,19 +63,12 @@ import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MatchDetailScreen(match: MatchSummary, content: GameContent?, rr: CompetitiveUpdate?, onBack: () -> Unit) {
+fun MatchDetailScreen(match: MatchSummary, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
+    val content = LocalGameContent.current
     val record = match.record
     val me = match.me
-    val myTeam = record.teams.find { it.teamId == me.teamId }?.teamId
-    // Your team first; free-for-all lists everyone together by score.
-    val teams = if (record.isTeamMode) {
-        record.players.groupBy { it.teamId }.entries
-            .sortedByDescending { it.key == myTeam }
-            .map { (teamId, players) -> teamId to players.sortedByDescending { it.score } }
-    } else {
-        listOf("" to record.players.sortedByDescending { it.score })
-    }
+    val myTeam = match.myTeamId
 
     Scaffold(
         topBar = {
@@ -93,7 +85,7 @@ fun MatchDetailScreen(match: MatchSummary, content: GameContent?, rr: Competitiv
                 .padding(padding)
                 .fillMaxSize(),
         ) {
-            item(key = "header") { Header(match, content, rr) }
+            item(key = "header") { Header(match) }
             item(key = "me") {
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     SectionHeader("YOUR PERFORMANCE")
@@ -114,16 +106,16 @@ fun MatchDetailScreen(match: MatchSummary, content: GameContent?, rr: Competitiv
                 item(key = "rounds") {
                     Column {
                         SectionHeader("ROUNDS", Modifier.padding(horizontal = 16.dp))
-                        RoundTimeline(record.rounds, myTeam, halfRounds(record.queueId))
+                        RoundTimeline(record.rounds, myTeam, record.halfRounds)
                     }
                 }
             }
-            teams.forEach { (teamId, players) ->
-                item(key = "team-$teamId") {
-                    val team = record.teams.find { it.teamId == teamId }
+            match.scoreboard().forEach { board ->
+                item(key = "team-${board.teamId}") {
+                    val team = board.team
                     val title = when {
                         !record.isTeamMode -> "SCOREBOARD"
-                        teamId == myTeam -> "YOUR TEAM"
+                        board.isMine -> "YOUR TEAM"
                         else -> "ENEMY TEAM"
                     }
                     Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.Bottom) {
@@ -140,8 +132,8 @@ fun MatchDetailScreen(match: MatchSummary, content: GameContent?, rr: Competitiv
                     }
                     ScoreboardHeader()
                 }
-                items(players, key = { "player-" + it.puuid }) { player ->
-                    ScoreboardRow(player, content, isMe = player.puuid == me.puuid, showRank = record.isRanked)
+                items(board.players, key = { "player-" + it.puuid }) { player ->
+                    ScoreboardRow(player, isMe = player.puuid == me.puuid, showRank = record.isRanked)
                 }
             }
         }
@@ -149,7 +141,9 @@ fun MatchDetailScreen(match: MatchSummary, content: GameContent?, rr: Competitiv
 }
 
 @Composable
-private fun Header(match: MatchSummary, content: GameContent?, rr: CompetitiveUpdate?) {
+private fun Header(match: MatchSummary) {
+    val content = LocalGameContent.current
+    val rr = match.rr
     val record = match.record
     val accent = match.outcome.color()
     Box(
@@ -174,7 +168,7 @@ private fun Header(match: MatchSummary, content: GameContent?, rr: CompetitiveUp
                 Text(match.scoreLine, fontFamily = Display, fontSize = 44.sp, color = accent)
                 if (rr != null) {
                     Spacer(Modifier.width(16.dp))
-                    RankIcon(content, rr.tierAfter, 28.dp, Modifier.padding(bottom = 10.dp))
+                    RankIcon(rr.tierAfter, 28.dp, Modifier.padding(bottom = 10.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(
                         "${signed(rr.rrEarned)} RR",
@@ -253,7 +247,8 @@ private fun ScoreboardHeader() {
 }
 
 @Composable
-private fun ScoreboardRow(player: PlayerRecord, content: GameContent?, isMe: Boolean, showRank: Boolean) {
+private fun ScoreboardRow(player: PlayerRecord, isMe: Boolean, showRank: Boolean) {
+    val content = LocalGameContent.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -263,19 +258,13 @@ private fun ScoreboardRow(player: PlayerRecord, content: GameContent?, isMe: Boo
             .background(if (isMe) ValorantRed.copy(alpha = 0.14f) else InkRaised)
             .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
-        AgentIcon(content, player.agentId, 30.dp)
+        AgentIcon(player.agentId, 30.dp)
         Spacer(Modifier.width(8.dp))
         val agentName = content?.agent(player.agentId)?.name
-        // Riot leaves names out of match details now; label those rows by agent, as the game's own history does.
-        val hasName = player.gameName.isNotBlank()
         val ranked = showRank && player.competitiveTier > 0
         Column(Modifier.weight(1f)) {
             Text(
-                when {
-                    hasName -> player.gameName
-                    isMe -> "You"
-                    else -> agentName ?: "Player"
-                },
+                player.displayName(isMe, agentName),
                 fontWeight = if (isMe) FontWeight.Bold else FontWeight.Medium,
                 fontSize = 13.sp,
                 maxLines = 1,
@@ -283,11 +272,11 @@ private fun ScoreboardRow(player: PlayerRecord, content: GameContent?, isMe: Boo
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (ranked) {
-                    RankIcon(content, player.competitiveTier, 14.dp)
+                    RankIcon(player.competitiveTier, 14.dp)
                     Spacer(Modifier.width(4.dp))
                 }
                 val detail = listOfNotNull(
-                    agentName?.takeIf { hasName || isMe },
+                    agentName?.takeIf { player.hasName || isMe },
                     content?.rank(player.competitiveTier)?.name?.takeIf { ranked },
                 ).joinToString(" · ")
                 Text(detail, fontSize = 10.sp, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -311,13 +300,6 @@ private fun ScoreboardRow(player: PlayerRecord, content: GameContent?, isMe: Boo
             )
         }
     }
-}
-
-/** Rounds before sides swap. */
-private fun halfRounds(queueId: String) = when (queueId) {
-    "swiftplay" -> 4
-    "spikerush" -> 3
-    else -> 12
 }
 
 private val COLUMN_WIDTHS = listOf(36.dp, 64.dp, 36.dp, 36.dp)

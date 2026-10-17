@@ -107,13 +107,14 @@ import app.radianite.R
 import app.radianite.data.riot.AuthTokens
 import app.radianite.data.riot.RiotAuth
 import app.radianite.data.store.FeaturedBundle
+import app.radianite.data.store.millisUntilStoreReset
+import app.radianite.ui.VersionLabel
 import app.radianite.ui.theme.Bone
 import app.radianite.ui.theme.Display
 import app.radianite.ui.theme.Ink
 import app.radianite.ui.theme.InkRaised
 import app.radianite.ui.theme.Mono
 import app.radianite.ui.theme.Muted
-import app.radianite.ui.VersionLabel
 import app.radianite.ui.theme.ValorantRed
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
@@ -348,10 +349,10 @@ private fun ProgressBars(count: Int, active: Int, activeFill: () -> Float) {
 /** Time until the daily offers rotate, which happens at 00:00 UTC. */
 @Composable
 private fun ResetChip(motion: Boolean) {
-    val remaining by produceState(msUntilUtcMidnight()) {
+    val remaining by produceState(millisUntilStoreReset(System.currentTimeMillis())) {
         while (true) {
             delay(1_000)
-            value = msUntilUtcMidnight()
+            value = millisUntilStoreReset(System.currentTimeMillis())
         }
     }
     val s = remaining / 1000
@@ -382,11 +383,6 @@ private fun ResetChip(motion: Boolean) {
             color = Bone,
         )
     }
-}
-
-private fun msUntilUtcMidnight(): Long {
-    val day = 24L * 60 * 60 * 1000
-    return day - System.currentTimeMillis() % day
 }
 
 /** Shown while the tokens from Riot's redirect are exchanged for an account and the store. */

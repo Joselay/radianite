@@ -1,15 +1,6 @@
 package app.radianite.data.content
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.decodeFromStream
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.io.IOException
-import java.util.concurrent.ConcurrentHashMap
 
 /** Upgrade levels (VFX, animation, finisher, ...) and color variants of one skin. */
 data class SkinDetail(
@@ -96,23 +87,4 @@ fun chromaLabel(displayName: String, index: Int): String {
     if (index == 0) return "Default"
     val inParens = Regex("""\(([^)]*)\)""").find(displayName)?.groupValues?.get(1) ?: return displayName.lines().last().trim()
     return inParens.replace(Regex("""^Variant\s*\d+\s*[-:]?\s*"""), "").trim().ifEmpty { inParens.trim() }
-}
-
-class SkinDetailRepository(
-    private val http: OkHttpClient,
-    private val json: Json,
-) {
-    private val memory = ConcurrentHashMap<String, SkinDetail>()
-
-    @OptIn(ExperimentalSerializationApi::class)
-    suspend fun detail(skinUuid: String): SkinDetail = memory[skinUuid] ?: withContext(Dispatchers.IO) {
-        val request = Request.Builder().url("https://valorant-api.com/v1/weapons/skins/$skinUuid").build()
-        http.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("HTTP ${response.code} from valorant-api.com")
-            json.decodeFromStream<DetailEnvelope>(response.body.byteStream()).data.toSkinDetail()
-        }
-    }.also { memory[skinUuid] = it }
-
-    @Serializable
-    private data class DetailEnvelope(val data: ApiSkinDetail)
 }

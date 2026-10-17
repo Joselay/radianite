@@ -1,7 +1,6 @@
 package app.radianite.data.player
 
 import app.radianite.data.content.GameContent
-import app.radianite.data.riot.CompetitiveUpdate
 import app.radianite.data.riot.ContractsResponse
 import app.radianite.data.riot.PlayerMmrResponse
 
@@ -9,6 +8,12 @@ const val COMPETITIVE_QUEUE = "competitive"
 
 /** Account levels always take 5,000 XP. */
 const val XP_PER_ACCOUNT_LEVEL = 5_000
+
+/** The first tier whose ranked rating is uncapped: Immortal 1 and up. */
+const val IMMORTAL_1 = 24
+
+/** Ranked rating fills a bar to this, below Immortal. */
+const val RR_PER_TIER = 100
 
 data class RankStatus(
     val tier: Int,
@@ -24,6 +29,9 @@ data class RankStatus(
     val placementsRemaining: Int,
 ) {
     val winPercent: Int get() = if (games > 0) wins * 100 / games else 0
+
+    /** Immortal and Radiant RR is uncapped, so there's no bar to fill. */
+    val rrCapped: Boolean get() = tier < IMMORTAL_1
 }
 
 /** A past act's badge: the highest tier won during it. */
@@ -60,10 +68,6 @@ fun actHistory(mmr: PlayerMmrResponse, content: GameContent): List<ActRank> =
         }
         .sortedByDescending { (act, _) -> act.startMillis }
         .map { it.second }
-
-/** Oldest first, so it reads left to right as a trend. */
-fun rrTrend(updates: Collection<CompetitiveUpdate>): List<CompetitiveUpdate> =
-    updates.filter { it.matchStartTime > 0 }.sortedBy { it.matchStartTime }
 
 /** Progress in this act's battle pass, falling back to the newest one the player has touched. */
 fun battlePass(contracts: ContractsResponse, content: GameContent, nowMillis: Long): BattlePassProgress? {

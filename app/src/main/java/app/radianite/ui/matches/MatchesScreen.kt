@@ -43,12 +43,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import app.radianite.data.content.GameContent
 import app.radianite.data.match.LiveMatch
 import app.radianite.data.match.LivePlayer
 import app.radianite.data.match.MatchSummary
-import app.radianite.data.riot.CompetitiveUpdate
 import app.radianite.ui.common.AgentIcon
+import app.radianite.ui.common.LocalGameContent
 import app.radianite.ui.common.MessageBanner
 import app.radianite.ui.common.RankIcon
 import app.radianite.ui.common.SectionHeader
@@ -111,12 +110,12 @@ fun MatchesScreen(riotId: String, viewModel: MatchesViewModel, onOpenMatch: (Mat
                 item(key = "header") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         state.message?.let { MessageBanner(it) }
-                        state.live?.let { LiveMatchCard(it, state.content) }
+                        state.live?.let { LiveMatchCard(it) }
                         if (state.matches.isNotEmpty()) SectionHeader("RECENT MATCHES")
                     }
                 }
                 items(state.matches, key = { it.record.matchId }) { match ->
-                    MatchRow(match, state.content, state.rrChanges[match.record.matchId], onClick = { onOpenMatch(match) })
+                    MatchRow(match, onClick = { onOpenMatch(match) })
                 }
                 if (state.matches.isEmpty() && !state.refreshing && state.message == null) {
                     item(key = "empty") { Text("No recent matches.", color = Muted, modifier = Modifier.padding(vertical = 32.dp)) }
@@ -138,7 +137,9 @@ fun MatchesScreen(riotId: String, viewModel: MatchesViewModel, onOpenMatch: (Mat
 }
 
 @Composable
-private fun MatchRow(match: MatchSummary, content: GameContent?, rr: CompetitiveUpdate?, onClick: () -> Unit) {
+private fun MatchRow(match: MatchSummary, onClick: () -> Unit) {
+    val content = LocalGameContent.current
+    val rr = match.rr
     val record = match.record
     val me = match.me
     val map = content?.map(record.mapId)
@@ -162,7 +163,7 @@ private fun MatchRow(match: MatchSummary, content: GameContent?, rr: Competitive
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(72.dp)) {
             Box(Modifier.width(4.dp).height(72.dp).background(accent))
             Spacer(Modifier.width(12.dp))
-            AgentIcon(content, me.agentId, 48.dp)
+            AgentIcon(me.agentId, 48.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(map?.name ?: "Unknown map", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -178,7 +179,7 @@ private fun MatchRow(match: MatchSummary, content: GameContent?, rr: Competitive
                 Text(match.scoreLine, fontFamily = Display, fontSize = 22.sp, color = accent)
                 if (rr != null) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        RankIcon(content, rr.tierAfter, 16.dp)
+                        RankIcon(rr.tierAfter, 16.dp)
                         Spacer(Modifier.width(4.dp))
                         Text(
                             "${signed(rr.rrEarned)} RR",
@@ -197,7 +198,8 @@ private fun MatchRow(match: MatchSummary, content: GameContent?, rr: Competitive
 }
 
 @Composable
-private fun LiveMatchCard(live: LiveMatch, content: GameContent?) {
+private fun LiveMatchCard(live: LiveMatch) {
+    val content = LocalGameContent.current
     val map = content?.map(live.mapId)
     Box(
         Modifier
@@ -227,20 +229,20 @@ private fun LiveMatchCard(live: LiveMatch, content: GameContent?) {
             Text(map?.name ?: "Loading map", fontFamily = Display, fontSize = 28.sp)
             live.queueId?.let { Text(content?.queueName(it) ?: it, color = Muted, style = MaterialTheme.typography.labelMedium) }
             SectionHeader("YOUR TEAM")
-            live.allies.forEach { LivePlayerRow(it, content) }
+            live.allies.forEach { LivePlayerRow(it) }
             if (live.enemies.isNotEmpty()) {
                 SectionHeader("ENEMY TEAM")
-                live.enemies.forEach { LivePlayerRow(it, content) }
+                live.enemies.forEach { LivePlayerRow(it) }
             }
         }
     }
 }
 
 @Composable
-private fun LivePlayerRow(player: LivePlayer, content: GameContent?) {
-    val agent = content?.agent(player.agentId)
+private fun LivePlayerRow(player: LivePlayer) {
+    val agent = LocalGameContent.current?.agent(player.agentId)
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 3.dp)) {
-        AgentIcon(content, player.agentId, 32.dp)
+        AgentIcon(player.agentId, 32.dp)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(
