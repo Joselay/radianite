@@ -52,17 +52,30 @@ object StoreSync {
     fun schedule(context: Context) {
         val work = WorkManager.getInstance(context)
         work.cancelUniqueWork(OLD_WORK_NAME)
-        val request = PeriodicWorkRequestBuilder<StoreSyncWorker>(1, TimeUnit.DAYS)
-            .setInitialDelay(millisUntilStoreReset(System.currentTimeMillis()) + AFTER_RESET_MILLIS, TimeUnit.MILLISECONDS)
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .setRequiresBatteryNotLow(true)
-                    .build(),
-            )
-            .build()
-        work.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+        work.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request())
     }
+
+    /**
+     * Pins the next run to just after the next rotation. Left alone, WorkManager counts a day from when each
+     * run ended, so the alerts would drift later every day, and one run held back (say, by a low battery)
+     * would move every one after it.
+     */
+    internal fun pinNextRun(context: Context) {
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request())
+    }
+
+    /** When the run after [nowMillis] is due: a few minutes after the next rotation. */
+    internal fun nextRunAt(nowMillis: Long): Long = nowMillis + millisUntilStoreReset(nowMillis) + AFTER_RESET_MILLIS
+
+    private fun request() = PeriodicWorkRequestBuilder<StoreSyncWorker>(1, TimeUnit.DAYS)
+        .setNextScheduleTimeOverride(nextRunAt(System.currentTimeMillis()))
+        .setConstraints(
+            Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .setRequiresBatteryNotLow(true)
+                .build(),
+        )
+        .build()
 
     fun cancel(context: Context) {
         WorkManager.getInstance(context).run {
@@ -109,7 +122,11 @@ object StoreSync {
 }
 
 class StoreSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-    override suspend fun doWork(): Result {
+    override suspend fun doWork(): Result =
+        // A retry keeps WorkManager's backoff; any other ending waits for the next rotation.
+        sync().also { if (it != Result.retry()) StoreSync.pinNextRun(applicationContext) }
+
+    private suspend fun sync(): Result {
         val container = (applicationContext as RadianiteApp).container
         container.account.ready()
         val accounts = container.account.saved.value

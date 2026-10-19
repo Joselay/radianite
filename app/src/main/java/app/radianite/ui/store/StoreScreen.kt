@@ -1,5 +1,6 @@
 package app.radianite.ui.store
 
+import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -93,6 +94,8 @@ fun StoreScreen(
     onOpenWishlist: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // Startup is done once the store is on screen, cached or fresh; Android logs the time as "Fully drawn".
+    ReportDrawnWhen { state.store != null }
     val onRefresh = viewModel::refresh
     val vp = state.wallet?.valorantPoints
     Scaffold(
