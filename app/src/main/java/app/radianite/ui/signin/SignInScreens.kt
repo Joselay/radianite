@@ -3,6 +3,7 @@ package app.radianite.ui.signin
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.provider.Settings
+import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
@@ -512,6 +513,10 @@ fun RiotSignInScreen(onTokens: (AuthTokens) -> Unit, onCancel: () -> Unit) {
                 factory = { context ->
                     WebView(context).apply {
                         webViewHolder[0] = this
+                        // AndroidView defaults to WRAP_CONTENT, which makes WebView lay the page out at zero
+                        // height so it can size to its content. 100vh is then 0, and Riot's page, which wraps
+                        // everything in a 100vh scroller, clips the sign-in card away, leaving only the art.
+                        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                         // Matches the app background so there's no white flash before Riot's page paints.
                         setBackgroundColor(Ink.toArgb())
                         settings.javaScriptEnabled = true
