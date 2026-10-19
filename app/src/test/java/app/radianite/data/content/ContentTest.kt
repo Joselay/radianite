@@ -13,23 +13,23 @@ class ContentTest {
     @get:Rule
     val tmp = TemporaryFolder()
 
-    private val reaver = """{"data":[{"uuid":"reaver","displayName":"Reaver Vandal","levels":[{"uuid":"LEVEL-1"}]}]}"""
+    private val reaver = """{"data":[{"uuid":"vandal","skins":[{"uuid":"reaver","displayName":"Reaver Vandal","levels":[{"uuid":"LEVEL-1"}]}]}]}"""
 
     private fun Fixture.version(v: String) = servers.json("valorant-api.com/v1/version", """{"data":{"riotClientVersion":"$v"}}""")
 
     @Test
     fun `an index downloads once per version and is reused from disk`() = runTest {
         val app = Fixture(tmp.root)
-        app.servers.json("valorant-api.com/v1/weapons/skins", reaver)
+        app.servers.json("valorant-api.com/v1/weapons", reaver)
 
         app.content.catalog()
         app.content.catalog()
         // A fresh start reads the index back from disk.
-        val restarted = Fixture(tmp.root).also { it.servers.json("valorant-api.com/v1/weapons/skins", reaver) }
+        val restarted = Fixture(tmp.root).also { it.servers.json("valorant-api.com/v1/weapons", reaver) }
         val catalog = restarted.content.catalog()
 
-        assertEquals(1, app.servers.count("valorant-api.com/v1/weapons/skins"))
-        assertEquals(0, restarted.servers.count("valorant-api.com/v1/weapons/skins"))
+        assertEquals(1, app.servers.count("valorant-api.com/v1/weapons"))
+        assertEquals(0, restarted.servers.count("valorant-api.com/v1/weapons"))
         assertEquals("Reaver Vandal", catalog.skinsByLevel["level-1"]?.name)
     }
 
@@ -41,18 +41,18 @@ class ContentTest {
         app.now += 60 * 60 * 1000
 
         assertEquals("release-13.09", app.content.catalog().version)
-        assertEquals(2, app.servers.count("valorant-api.com/v1/weapons/skins"))
+        assertEquals(2, app.servers.count("valorant-api.com/v1/weapons"))
     }
 
     @Test
     fun `when the new patch's skins can't be downloaded, the last catalog stands in`() = runTest {
         val app = Fixture(tmp.root)
-        app.servers.json("valorant-api.com/v1/weapons/skins", reaver)
+        app.servers.json("valorant-api.com/v1/weapons", reaver)
         app.content.catalog()
 
         app.version("release-13.09")
         app.now += 60 * 60 * 1000
-        app.servers.on("valorant-api.com/v1/weapons/skins") { Reply(503) }
+        app.servers.on("valorant-api.com/v1/weapons") { Reply(503) }
 
         val catalog = app.content.catalog()
         assertEquals("release-13.08", catalog.version)

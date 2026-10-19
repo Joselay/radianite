@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import app.radianite.data.store.featuredBundles
 import app.radianite.ui.AppUiState
 import app.radianite.ui.AppViewModel
 import app.radianite.ui.home.HomeScreen
@@ -31,7 +32,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             RadianiteTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    RadianiteRoot(container, viewModel { AppViewModel(container.account, container.store) })
+                    RadianiteRoot(container, viewModel { AppViewModel(container.account, featuredBundles = { container.device.featuredBundles() }) })
                 }
             }
         }
@@ -41,12 +42,26 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun RadianiteRoot(container: AppContainer, viewModel: AppViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val featuredBundles by viewModel.featuredBundles.collectAsStateWithLifecycle()
+    val featuredBundles by viewModel.bundles.collectAsStateWithLifecycle()
+    val accounts by viewModel.accounts.collectAsStateWithLifecycle()
     when (val s = state) {
         AppUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        is AppUiState.SignedOut -> SignedOutScreen(s.message, featuredBundles, onSignIn = viewModel::startSignIn)
+        is AppUiState.SignedOut -> SignedOutScreen(
+            message = s.message,
+            featuredBundles = featuredBundles,
+            accounts = accounts,
+            onSignIn = viewModel::startSignIn,
+            onPickAccount = viewModel::switchTo,
+        )
         AppUiState.SigningIn -> RiotSignInScreen(onTokens = viewModel::onSignInRedirect, onCancel = viewModel::cancelSignIn)
         AppUiState.CompletingSignIn -> CompletingSignInScreen()
-        is AppUiState.SignedIn -> HomeScreen(container, s, onSignOut = viewModel::signOut)
+        is AppUiState.SignedIn -> HomeScreen(
+            container = container,
+            state = s,
+            accounts = accounts,
+            onSwitchAccount = viewModel::switchTo,
+            onAddAccount = viewModel::startSignIn,
+            onSignOut = viewModel::signOut,
+        )
     }
 }

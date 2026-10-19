@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Radianite</string>
+    <string name="widget_name">Today\'s store</string>
+    <string name="widget_description">Your four daily skins and when they reset</string>
 </resources>

@@ -1,6 +1,11 @@
 package app.radianite.ui.skin
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,6 +30,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -44,9 +51,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
@@ -54,8 +63,10 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.compose.PlayerSurface
+import app.radianite.R
 import app.radianite.data.content.SkinVariant
 import app.radianite.data.store.StoreSkin
+import app.radianite.ui.common.BackButton
 import app.radianite.ui.theme.InkRaised
 import app.radianite.ui.theme.Muted
 import app.radianite.ui.theme.ValorantRed
@@ -68,10 +79,15 @@ fun SkinDetailScreen(
     skin: StoreSkin,
     viewModel: SkinDetailViewModel,
     newPlayer: (android.content.Context) -> ExoPlayer,
+    wishlisted: Boolean,
+    onToggleWishlist: () -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    // Store alerts are notifications; ask for them when the first skin goes on the wishlist, not before.
+    val askForNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     val accent = remember(skin.tierColor) { rgbaColor(skin.tierColor)?.copy(alpha = 1f) ?: ValorantRed }
 
     Scaffold(
@@ -84,7 +100,23 @@ fun SkinDetailScreen(
                         if (subtitle.isNotEmpty()) Text(subtitle, style = MaterialTheme.typography.labelMedium, color = accent)
                     }
                 },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Back", color = Muted) } },
+                navigationIcon = { BackButton(onBack) },
+                actions = {
+                    IconButton(onClick = {
+                        if (!wishlisted && Build.VERSION.SDK_INT >= 33 &&
+                            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            askForNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        onToggleWishlist()
+                    }) {
+                        Icon(
+                            painterResource(if (wishlisted) R.drawable.ic_star else R.drawable.ic_star_outline),
+                            contentDescription = if (wishlisted) "Remove from wishlist" else "Add to wishlist",
+                            tint = if (wishlisted) ValorantRed else Muted,
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
@@ -205,7 +237,7 @@ private fun PreviewStage(variant: SkinVariant, newPlayer: (android.content.Conte
         if (variant.videoUrl != null) {
             PlayerSurface(player = player, modifier = Modifier.fillMaxSize())
             if (buffering) CircularProgressIndicator(color = Color.White)
-            else if (!playing) Text("▶", color = Color.White, style = MaterialTheme.typography.displaySmall)
+            else if (!playing) Icon(painterResource(R.drawable.ic_play), contentDescription = "Play", tint = Color.White, modifier = Modifier.size(56.dp))
         } else {
             AsyncImage(
                 model = variant.imageUrl,
@@ -243,7 +275,7 @@ private fun LevelRow(level: SkinVariant, selected: Boolean, accent: Color, onCli
     ) {
         Text(level.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(72.dp))
         Text(level.subtitle.orEmpty(), color = if (selected) accent else Muted, modifier = Modifier.weight(1f))
-        if (level.videoUrl != null) Text("▶", color = if (selected) accent else Muted)
+        if (level.videoUrl != null) Icon(painterResource(R.drawable.ic_play), contentDescription = "Has video", tint = if (selected) accent else Muted, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -274,6 +306,6 @@ private fun ChromaTile(chroma: SkinVariant, selected: Boolean, accent: Color, on
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        if (chroma.videoUrl != null) Text("▶", style = MaterialTheme.typography.labelSmall, color = Muted)
+        if (chroma.videoUrl != null) Icon(painterResource(R.drawable.ic_play), contentDescription = "Has video", tint = Muted, modifier = Modifier.size(14.dp))
     }
 }

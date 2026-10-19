@@ -42,7 +42,7 @@ data class LivePlayer(
 data class MatchPage(val matches: List<MatchSummary>, val endReached: Boolean)
 
 /**
- * The signed-in account's matches, from its point of view. Pages through Riot's history, keeps finished
+ * One account's matches, from its point of view. Pages through Riot's history, keeps finished
  * matches on disk, and attaches each recent competitive game's ranked rating change.
  */
 class MatchHistory(
@@ -54,7 +54,7 @@ class MatchHistory(
 
     // Paging state, guarded by pageLock: one page loads at a time.
     private val pageLock = Mutex()
-    private var pagedFor: String? = null
+    private var pagedFor: Pair<String, String?>? = null
     private var loaded: List<MatchSummary> = emptyList()
     private var nextIndex = 0
     private var endReached = false
@@ -62,16 +62,16 @@ class MatchHistory(
     @Volatile
     private var rrCache: RrCache? = null
 
-    /** The newest page, starting over from the top. */
-    suspend fun firstPage(): MatchPage = pageLock.withLock { loadFirstPage(riot.puuid()) }
+    /** The newest page, starting over from the top; only [queue]'s matches when it's set. */
+    suspend fun firstPage(queue: String? = null): MatchPage = pageLock.withLock { loadFirstPage(riot.puuid(), queue) }
 
-    /** The next older page added to what's loaded; starts from the top if nothing is loaded for this account. */
-    suspend fun nextPage(): MatchPage = pageLock.withLock {
+    /** The next older page added to what's loaded; starts from the top if nothing is loaded for this account and queue. */
+    suspend fun nextPage(queue: String? = null): MatchPage = pageLock.withLock {
         val puuid = riot.puuid()
-        if (pagedFor != puuid) return@withLock loadFirstPage(puuid)
+        if (pagedFor != puuid to queue) return@withLock loadFirstPage(puuid, queue)
         if (endReached) return@withLock MatchPage(loaded, endReached = true)
         val rr = optional("Ranked rating changes") { rankedRatingChanges() }.orEmpty()
-        val entries = riot.matchHistory(nextIndex, PAGE_SIZE).history
+        val entries = riot.matchHistory(nextIndex, PAGE_SIZE, queue).history
         val summaries = summarize(puuid, load(entries.map { it.matchId }), rr)
         // Index by entries, not loaded.size: matches that fail to load are skipped.
         nextIndex += entries.size
@@ -112,11 +112,11 @@ class MatchHistory(
         return riot.coreGame()?.toLive(self)
     }
 
-    private suspend fun loadFirstPage(puuid: String): MatchPage = coroutineScope {
+    private suspend fun loadFirstPage(puuid: String, queue: String?): MatchPage = coroutineScope {
         val rr = async { optional("Ranked rating changes") { rankedRatingChanges(maxAgeMillis = 0) }.orEmpty() }
-        val entries = riot.matchHistory(0, PAGE_SIZE).history
+        val entries = riot.matchHistory(0, PAGE_SIZE, queue).history
         val summaries = summarize(puuid, load(entries.map { it.matchId }), rr.await())
-        pagedFor = puuid
+        pagedFor = puuid to queue
         loaded = summaries
         nextIndex = entries.size
         endReached = entries.size < PAGE_SIZE

@@ -38,7 +38,8 @@ class Content(
 
     private val catalogIndex = VersionedIndex(store, Slots.skinCatalog, Catalog::version) { version ->
         coroutineScope {
-            val skins = async { api.get("weapons/skins", ListSerializer(ApiSkin.serializer())) }
+            // The weapons list rather than weapons/skins: it says which weapon each skin is for.
+            val skins = async { api.get("weapons", ListSerializer(ApiWeaponSkins.serializer())) }
             val tiers = async { api.get("contenttiers", ListSerializer(ApiContentTier.serializer())) }
             val bundles = async { api.get("bundles", ListSerializer(ApiBundle.serializer())) }
             val (s, t, b) = Triple(skins.await(), tiers.await(), bundles.await())

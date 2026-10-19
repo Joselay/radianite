@@ -2,7 +2,6 @@ package app.radianite.ui.signin
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
-import android.provider.Settings
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.RenderProcessGoneDetail
@@ -88,7 +87,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -96,6 +94,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -105,11 +104,13 @@ import androidx.core.net.toUri
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import app.radianite.R
+import app.radianite.data.account.SavedAccount
 import app.radianite.data.riot.AuthTokens
 import app.radianite.data.riot.RiotAuth
 import app.radianite.data.store.FeaturedBundle
 import app.radianite.data.store.millisUntilStoreReset
 import app.radianite.ui.VersionLabel
+import app.radianite.ui.common.rememberMotionEnabled
 import app.radianite.ui.theme.Bone
 import app.radianite.ui.theme.Display
 import app.radianite.ui.theme.Ink
@@ -148,7 +149,14 @@ private const val RIOT_LOGIN_LAYER_FIX = """
 """
 
 @Composable
-fun SignedOutScreen(message: String?, featuredBundles: List<FeaturedBundle>, onSignIn: () -> Unit) {
+fun SignedOutScreen(
+    message: String?,
+    featuredBundles: List<FeaturedBundle>,
+    /** Accounts still signed in on this device, e.g. after another one's session expired. */
+    accounts: List<SavedAccount>,
+    onSignIn: () -> Unit,
+    onPickAccount: (puuid: String) -> Unit,
+) {
     val motion = rememberMotionEnabled()
     val appear = remember { Animatable(if (motion) 0f else 1f) }
     LaunchedEffect(Unit) { appear.animateTo(1f, tween(1_000, easing = FastOutSlowInEasing)) }
@@ -211,7 +219,16 @@ fun SignedOutScreen(message: String?, featuredBundles: List<FeaturedBundle>, onS
                     ErrorBanner(it)
                     Spacer(Modifier.height(16.dp))
                 }
-                HudButton("SIGN IN WITH RIOT", onSignIn)
+                if (accounts.isNotEmpty()) {
+                    Text("// STILL SIGNED IN", fontFamily = Mono, fontSize = 11.sp, letterSpacing = 1.5.sp, color = Muted)
+                    Spacer(Modifier.height(8.dp))
+                    accounts.forEach { account ->
+                        SavedAccountButton(account.riotId, onClick = { onPickAccount(account.puuid) })
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+                HudButton(if (accounts.isEmpty()) "SIGN IN WITH RIOT" else "ADD ACCOUNT", onSignIn)
                 Spacer(Modifier.height(12.dp))
                 VersionLabel(Modifier.align(Alignment.CenterHorizontally))
             }
@@ -700,6 +717,24 @@ private fun HudButton(text: String, onClick: () -> Unit) {
     }
 }
 
+/** A quieter, outlined companion to [HudButton] for picking an account that's already signed in. */
+@Composable
+private fun SavedAccountButton(riotId: String, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .border(1.dp, Bone.copy(alpha = 0.35f))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp),
+    ) {
+        Text("CONTINUE AS ", fontFamily = Mono, fontSize = 12.sp, color = Muted)
+        Text(riotId, fontWeight = FontWeight.SemiBold, color = Bone, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Icon(painterResource(R.drawable.ic_arrow_forward), contentDescription = null, tint = Bone, modifier = Modifier.size(18.dp))
+    }
+}
+
 /** The launcher icon's crystal on its red tile, so the screen matches what the user tapped. */
 @Composable
 private fun BrandMark(size: Int) {
@@ -762,11 +797,3 @@ private fun Modifier.cornerBrackets(color: Color, progress: () -> Float, arm: Dp
     }
 }
 
-/** False when the user has turned system animations off; autoplay and loops then hold still. */
-@Composable
-private fun rememberMotionEnabled(): Boolean {
-    val context = LocalContext.current
-    return remember {
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f
-    }
-}

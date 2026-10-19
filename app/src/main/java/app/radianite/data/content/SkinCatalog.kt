@@ -19,14 +19,17 @@ data class CatalogSkin(
     val name: String,
     val icon: String?,
     val tierUuid: String?,
+    /** Lowercase UUID of the weapon the skin is for. No default, as above. */
+    val weaponUuid: String,
 )
 
-/** [color] is RRGGBBAA hex, as published by valorant-api.com. */
+/** [color] is RRGGBBAA hex, as published by valorant-api.com. [rank] orders rarities, Select lowest. */
 @Serializable
 data class CatalogTier(
     val name: String,
     val color: String,
     val icon: String?,
+    val rank: Int,
 )
 
 @Serializable
@@ -37,6 +40,10 @@ data class CatalogBundle(
 
 @Serializable
 data class ApiVersion(val riotClientVersion: String)
+
+/** A weapon from valorant-api.com's weapons list, which carries its skins. */
+@Serializable
+data class ApiWeaponSkins(val uuid: String, val skins: List<ApiSkin> = emptyList())
 
 @Serializable
 data class ApiSkin(
@@ -60,6 +67,7 @@ data class ApiContentTier(
     val devName: String,
     val highlightColor: String,
     val displayIcon: String? = null,
+    val rank: Int = 0,
 )
 
 @Serializable
@@ -72,22 +80,22 @@ data class ApiBundle(
 
 fun buildCatalog(
     version: String,
-    skins: List<ApiSkin>,
+    weapons: List<ApiWeaponSkins>,
     tiers: List<ApiContentTier>,
     bundles: List<ApiBundle> = emptyList(),
 ): Catalog {
-    val byLevel = HashMap<String, CatalogSkin>(skins.size * 2)
-    for (skin in skins) {
+    val byLevel = HashMap<String, CatalogSkin>(weapons.sumOf { it.skins.size } * 2)
+    for (weapon in weapons) for (skin in weapon.skins) {
         val icon = skin.levels.firstOrNull()?.displayIcon
             ?: skin.displayIcon
             ?: skin.chromas.firstOrNull()?.fullRender
-        val entry = CatalogSkin(skin.uuid, skin.displayName, icon, skin.contentTierUuid)
+        val entry = CatalogSkin(skin.uuid, skin.displayName, icon, skin.contentTierUuid, weapon.uuid.lowercase())
         for (level in skin.levels) byLevel[level.uuid.lowercase()] = entry
     }
     return Catalog(
         version = version,
         skinsByLevel = byLevel,
-        tiers = tiers.associate { it.uuid.lowercase() to CatalogTier(it.devName, it.highlightColor, it.displayIcon) },
+        tiers = tiers.associate { it.uuid.lowercase() to CatalogTier(it.devName, it.highlightColor, it.displayIcon, it.rank) },
         bundles = bundles.associate { it.uuid.lowercase() to CatalogBundle(it.displayName, it.verticalPromoImage ?: it.displayIcon) },
     )
 }

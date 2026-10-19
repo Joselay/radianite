@@ -15,8 +15,8 @@ class StoreRepositoryTest {
 
     private fun Fixture.store(): StoreRepository {
         servers.json(
-            "valorant-api.com/v1/weapons/skins",
-            """{"data":[{"uuid":"reaver","displayName":"Reaver Vandal","levels":[{"uuid":"level-1"}]}]}""",
+            "valorant-api.com/v1/weapons",
+            """{"data":[{"uuid":"vandal","skins":[{"uuid":"reaver","displayName":"Reaver Vandal","levels":[{"uuid":"level-1"}]}]}]}""",
         )
         servers.json(
             "valorant-api.com/v1/bundles",
@@ -32,7 +32,7 @@ class StoreRepositoryTest {
             """.trimIndent(),
         )
         servers.json("/store/v1/wallet/", """{"Balances":{"$VALORANT_POINTS_UUID":1000}}""")
-        return StoreRepository(riot, content, local, clock = { now })
+        return StoreRepository(riot, content, local, device, clock = { now })
     }
 
     @Test
@@ -44,22 +44,45 @@ class StoreRepositoryTest {
 
         assertEquals("Reaver Vandal", fresh.store.skins.single().name)
         assertEquals(1000, fresh.wallet?.valorantPoints)
-        assertEquals(fresh.store, store.cached()?.store)
-        assertEquals(listOf(FeaturedBundle("Reaver 2.0", "reaver.png")), store.featuredBundles())
+        assertEquals(fresh, store.cached())
+        assertEquals(listOf(FeaturedBundle("Reaver 2.0", "reaver.png")), app.device.featuredBundles())
 
         app.now += 3600 * 1000
         assertNull("rotated", store.cached())
     }
 
     @Test
-    fun `another account never sees the cached store`() = runTest {
+    fun `featured bundles outlive the account for the welcome screen`() = runTest {
         val app = Fixture(tmp.root).apply { signIn() }
         app.store().refresh()
 
-        app.signIn(puuid = "someone-else")
-        val other = Fixture(tmp.root).store()
+        app.local.clear()
 
-        assertNull(other.cached())
+        assertEquals(1, app.device.featuredBundles().size)
+    }
+
+    @Test
+    fun `the cached wallet is the last one seen, even when the next refresh can't get one`() = runTest {
+        val app = Fixture(tmp.root).apply { signIn() }
+        val store = app.store()
+        store.refresh()
+        app.servers.on("/store/v1/wallet/") { Reply(500) }
+
+        store.refresh()
+
+        assertEquals(1000, store.cached()?.wallet?.valorantPoints)
+    }
+
+    @Test
+    fun `each refresh is reported`() = runTest {
+        val app = Fixture(tmp.root).apply { signIn() }
+        app.store()
+        val reported = mutableListOf<StoreSnapshot>()
+        val store = StoreRepository(app.riot, app.content, app.local, app.device, clock = { app.now }, onRefreshed = { reported += it })
+
+        val fresh = store.refresh()
+
+        assertEquals(listOf(fresh), reported)
     }
 
     @Test

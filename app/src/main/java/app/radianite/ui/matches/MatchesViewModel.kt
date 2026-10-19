@@ -17,7 +17,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** The queues the match list can be narrowed to; [queueId] is Riot's, null for every queue. */
+enum class QueueFilter(val label: String, val queueId: String?) {
+    ALL("All", null),
+    COMPETITIVE("Competitive", "competitive"),
+    UNRATED("Unrated", "unrated"),
+    SWIFTPLAY("Swiftplay", "swiftplay"),
+    SPIKE_RUSH("Spike Rush", "spikerush"),
+    DEATHMATCH("Deathmatch", "deathmatch"),
+    TEAM_DEATHMATCH("Team Deathmatch", "hurm"),
+    PREMIER("Premier", "premier"),
+}
+
 data class MatchesUiState(
+    val filter: QueueFilter = QueueFilter.ALL,
     val matches: List<MatchSummary> = emptyList(),
     val live: LiveMatch? = null,
     val refreshing: Boolean = true,
@@ -36,15 +49,24 @@ class MatchesViewModel(private val history: MatchHistory) : ViewModel() {
         refresh()
     }
 
+    /** Shows only [filter]'s matches, loading them from the top. */
+    fun select(filter: QueueFilter) {
+        if (filter == _state.value.filter) return
+        // The old queue's matches go at once, so they're never shown under the new filter.
+        _state.update { it.copy(filter = filter, matches = emptyList(), endReached = false) }
+        refresh()
+    }
+
     fun refresh() {
         job?.cancel()
         job = viewModelScope.launch {
             // A refresh replaces any page still loading, so its spinner goes too.
             _state.update { it.copy(refreshing = true, loadingMore = false, message = null) }
+            val queue = _state.value.filter.queueId
             load {
                 coroutineScope {
                     val live = async { optional("Live match") { history.liveMatch() } }
-                    val page = history.firstPage()
+                    val page = history.firstPage(queue)
                     _state.update { it.withPage(page).copy(live = live.await(), refreshing = false) }
                 }
             }
@@ -57,7 +79,7 @@ class MatchesViewModel(private val history: MatchHistory) : ViewModel() {
         job = viewModelScope.launch {
             _state.update { it.copy(loadingMore = true, message = null) }
             load {
-                val page = history.nextPage()
+                val page = history.nextPage(s.filter.queueId)
                 _state.update { it.withPage(page).copy(loadingMore = false) }
             }
         }

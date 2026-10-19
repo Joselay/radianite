@@ -3,6 +3,7 @@ package app.radianite.data.store
 import app.radianite.data.content.ApiContentTier
 import app.radianite.data.content.ApiSkin
 import app.radianite.data.content.ApiSkinLevel
+import app.radianite.data.content.ApiWeaponSkins
 import app.radianite.data.content.CatalogBundle
 import app.radianite.data.content.buildCatalog
 import app.radianite.data.riot.StorefrontResponse
@@ -17,13 +18,18 @@ class DailyStoreTest {
 
     private val catalog = buildCatalog(
         version = "release-13.08",
-        skins = listOf(
-            ApiSkin(
-                uuid = "reaver",
-                displayName = "Reaver Vandal",
-                displayIcon = "skin.png",
-                contentTierUuid = "60BCA009-4182-7998-DEE7-B8A2558DC369",
-                levels = listOf(ApiSkinLevel("AAAA-1", "level1.png"), ApiSkinLevel("aaaa-2", null)),
+        weapons = listOf(
+            ApiWeaponSkins(
+                "vandal",
+                listOf(
+                    ApiSkin(
+                        uuid = "reaver",
+                        displayName = "Reaver Vandal",
+                        displayIcon = "skin.png",
+                        contentTierUuid = "60BCA009-4182-7998-DEE7-B8A2558DC369",
+                        levels = listOf(ApiSkinLevel("AAAA-1", "level1.png"), ApiSkinLevel("aaaa-2", null)),
+                    ),
+                ),
             ),
         ),
         tiers = listOf(ApiContentTier("60bca009-4182-7998-dee7-b8a2558dc369", "Premium", "d1548d33", "premium.png")),

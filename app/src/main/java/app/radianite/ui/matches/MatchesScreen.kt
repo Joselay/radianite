@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -46,11 +47,14 @@ import androidx.lifecycle.repeatOnLifecycle
 import app.radianite.data.match.LiveMatch
 import app.radianite.data.match.LivePlayer
 import app.radianite.data.match.MatchSummary
+import app.radianite.ui.common.AccountsButton
 import app.radianite.ui.common.AgentIcon
+import app.radianite.ui.common.HudChip
 import app.radianite.ui.common.LocalGameContent
 import app.radianite.ui.common.MessageBanner
 import app.radianite.ui.common.RankIcon
 import app.radianite.ui.common.SectionHeader
+import app.radianite.ui.common.Skeleton
 import app.radianite.ui.common.WinGreen
 import app.radianite.ui.common.color
 import app.radianite.ui.common.relativeTime
@@ -66,7 +70,7 @@ import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MatchesScreen(riotId: String, viewModel: MatchesViewModel, onOpenMatch: (MatchSummary) -> Unit) {
+fun MatchesScreen(riotId: String, viewModel: MatchesViewModel, onOpenAccounts: () -> Unit, onOpenMatch: (MatchSummary) -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     // Poll for agent select / live games only while this tab is visible and the app is in front.
@@ -89,6 +93,7 @@ fun MatchesScreen(riotId: String, viewModel: MatchesViewModel, onOpenMatch: (Mat
                         Text(riotId, style = MaterialTheme.typography.labelMedium, color = Muted)
                     }
                 },
+                actions = { AccountsButton(onOpenAccounts) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
@@ -111,14 +116,20 @@ fun MatchesScreen(riotId: String, viewModel: MatchesViewModel, onOpenMatch: (Mat
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         state.message?.let { MessageBanner(it) }
                         state.live?.let { LiveMatchCard(it) }
-                        if (state.matches.isNotEmpty()) SectionHeader("RECENT MATCHES")
+                        QueueChips(state.filter, onSelect = viewModel::select)
                     }
                 }
                 items(state.matches, key = { it.record.matchId }) { match ->
                     MatchRow(match, onClick = { onOpenMatch(match) })
                 }
+                if (state.matches.isEmpty() && state.refreshing) {
+                    items(PLACEHOLDER_ROWS, key = { "skeleton-$it" }) { Skeleton(Modifier.fillMaxWidth().height(72.dp)) }
+                }
                 if (state.matches.isEmpty() && !state.refreshing && state.message == null) {
-                    item(key = "empty") { Text("No recent matches.", color = Muted, modifier = Modifier.padding(vertical = 32.dp)) }
+                    item(key = "empty") {
+                        val queue = state.filter.takeIf { it != QueueFilter.ALL }?.label
+                        Text(if (queue == null) "No recent matches." else "No recent $queue matches.", color = Muted, modifier = Modifier.padding(vertical = 32.dp))
+                    }
                 }
                 if (state.matches.isNotEmpty() && !state.endReached) {
                     item(key = "more") {
@@ -132,6 +143,16 @@ fun MatchesScreen(riotId: String, viewModel: MatchesViewModel, onOpenMatch: (Mat
                     }
                 }
             }
+        }
+    }
+}
+
+/** One chip per queue; the list reloads from the top for the one picked. */
+@Composable
+private fun QueueChips(selected: QueueFilter, onSelect: (QueueFilter) -> Unit) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(QueueFilter.entries, key = { it.name }) { filter ->
+            HudChip(filter.label, selected = filter == selected, onClick = { onSelect(filter) })
         }
     }
 }
@@ -263,3 +284,4 @@ private fun LivePlayerRow(player: LivePlayer) {
 }
 
 private const val LIVE_POLL_MILLIS = 20_000L
+private const val PLACEHOLDER_ROWS = 6

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -9,9 +11,26 @@ fun git(vararg args: String) = providers.exec { commandLine("git", *args) }.stan
 val commitCount = git("rev-list", "--count", "HEAD").toInt()
 val commit = git("rev-parse", "--short", "HEAD") + if (git("status", "--porcelain").isNotEmpty()) "-dirty" else ""
 
+// A keystore.properties at the project root (kept out of git) signs release builds for distributing;
+// without one they fall back to the debug key, which is fine for sideloading onto your own phone.
+val keystore = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { file ->
+    Properties().apply { file.inputStream().use(::load) }
+}
+
 android {
     namespace = "app.radianite"
     compileSdk = 37
+
+    signingConfigs {
+        if (keystore != null) {
+            create("release") {
+                storeFile = rootProject.file(keystore.getProperty("storeFile"))
+                storePassword = keystore.getProperty("storePassword")
+                keyAlias = keystore.getProperty("keyAlias")
+                keyPassword = keystore.getProperty("keyPassword")
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "app.radianite"
@@ -29,8 +48,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            // Personal sideload build; swap for a real keystore before distributing.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
@@ -57,6 +75,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.profileinstaller)
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.glance.appwidget)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

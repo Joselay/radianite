@@ -57,6 +57,33 @@ class MatchHistoryTest {
     }
 
     @Test
+    fun `a queue filter asks Riot for that queue only, and paging stays within it`() = runTest {
+        val app = Fixture(tmp.root).apply { signIn(accessToken = "new") }
+        val history = app.history(total = 12)
+        history.firstPage()
+
+        history.firstPage(queue = "competitive")
+        history.nextPage(queue = "competitive")
+
+        val queries = app.servers.requests.filter { "/match-history/" in it.url.toString() }.map { it.url.query }
+        assertEquals(
+            listOf("startIndex=0&endIndex=10", "startIndex=0&endIndex=10&queue=competitive", "startIndex=10&endIndex=20&queue=competitive"),
+            queries,
+        )
+    }
+
+    @Test
+    fun `switching queue starts the next page from the top`() = runTest {
+        val app = Fixture(tmp.root).apply { signIn(accessToken = "new") }
+        val history = app.history(total = 12)
+        history.firstPage()
+
+        history.nextPage(queue = "unrated")
+
+        assertEquals("startIndex=0&endIndex=10&queue=unrated", app.servers.requests.last { "/match-history/" in it.url.toString() }.url.query)
+    }
+
+    @Test
     fun `starting over replaces what was paged`() = runTest {
         val history = Fixture(tmp.root).apply { signIn(accessToken = "new") }.history(total = 25)
         history.firstPage()

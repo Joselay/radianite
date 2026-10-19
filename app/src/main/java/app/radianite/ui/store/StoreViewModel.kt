@@ -29,7 +29,7 @@ class StoreViewModel(private val repository: StoreRepository) : ViewModel() {
     init {
         viewModelScope.launch {
             // Show the cached store instantly, then refresh in the background.
-            repository.cached()?.let { cached -> _state.update { it.copy(store = cached.store) } }
+            repository.cached()?.let { cached -> _state.update { it.copy(store = cached.store, wallet = cached.wallet) } }
             refresh()
         }
     }
@@ -40,7 +40,8 @@ class StoreViewModel(private val repository: StoreRepository) : ViewModel() {
             _state.update { it.copy(refreshing = true, message = null) }
             loadReporting({ message -> _state.update { it.copy(refreshing = false, message = message) } }) {
                 val fresh = repository.refresh()
-                _state.update { it.copy(store = fresh.store, wallet = fresh.wallet, refreshing = false) }
+                // A refresh that couldn't get the wallet keeps the last one rather than hiding it.
+                _state.update { it.copy(store = fresh.store, wallet = fresh.wallet ?: it.wallet, refreshing = false) }
             }
         }
     }

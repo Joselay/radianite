@@ -23,7 +23,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -33,6 +32,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import app.radianite.data.match.MatchSummary
 import app.radianite.data.match.PlayerRecord
 import app.radianite.data.match.RoundRecord
+import app.radianite.ui.common.BackButton
 import app.radianite.ui.common.AgentIcon
 import app.radianite.ui.common.LocalGameContent
 import app.radianite.ui.common.RankIcon
@@ -74,7 +76,7 @@ fun MatchDetailScreen(match: MatchSummary, onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text(content?.map(record.mapId)?.name ?: "Match", fontWeight = FontWeight.Bold) },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Back", color = Muted) } },
+                navigationIcon = { BackButton(onBack) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
@@ -202,7 +204,9 @@ private fun RoundTimeline(rounds: List<RoundRecord>, myTeam: String, halfRounds:
             // A gap where sides swap; overtime rounds follow without one.
             if (index == halfRounds) Spacer(Modifier.width(8.dp))
             val won = round.winningTeam == myTeam
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Read as "Round 3, won, elimination" rather than a letter and a number.
+            val spoken = "Round ${index + 1}, ${if (won) "won" else "lost"}, ${roundEnding(round.resultCode)}"
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clearAndSetSemantics { contentDescription = spoken }) {
                 Box(
                     Modifier
                         .size(width = 22.dp, height = 28.dp)
@@ -221,8 +225,17 @@ private fun RoundTimeline(rounds: List<RoundRecord>, myTeam: String, halfRounds:
         fontFamily = Mono,
         fontSize = 9.sp,
         color = Muted,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        // The rounds speak for themselves to a screen reader; the key is only for the glyphs.
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).clearAndSetSemantics { },
     )
+}
+
+private fun roundEnding(resultCode: String) = when (resultCode) {
+    "Elimination" -> "elimination"
+    "Detonate" -> "spike detonated"
+    "Defuse" -> "spike defused"
+    "Surrendered" -> "surrender"
+    else -> "time ran out"
 }
 
 private fun roundGlyph(resultCode: String) = when (resultCode) {

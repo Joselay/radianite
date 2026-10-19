@@ -22,17 +22,23 @@ Domain language for Radianite. Module names in code follow these terms.
 
 **Leaderboard**: the region's competitive ranking for the current act. Players can hide their name; they show as "Secret Agent". `LeaderboardEntry`.
 
-**Collection**: the player's equipped loadout, owned skins and owned agents.
+**Collection**: the player's equipped loadout, owned skins and owned agents, with each skin's store price and the collection's total **value** in VP.
+
+**Wishlist**: skins the user is waiting for, kept for the device rather than an account. A wishlisted skin in any signed-in account's Daily Store or Night Market is **announced** with a notification, once per rotation. `Wishlist`.
 
 **Content**: names and art for the IDs Riot returns (agents, maps, ranks, acts, queues, weapons, titles, battle passes, skins, tiers, bundles), from the community-run valorant-api.com, per game version.
 
-**Session**: the signed-in account's Riot tokens, shard and region (`RiotSession`). Renewed silently with the Riot cookies the sign-in page set; when that fails the session has **expired** and the user signs in again.
+**Session**: one account's Riot tokens, shard and region (`RiotSession`). Renewed silently with that account's Riot cookies, copied from the sign-in page when it signed in (`AccountCookies`); when that fails the session has **expired** and the account signs in again.
+
+**Saved account**: an account signed in on this device (`SavedAccount`). Several can be; one at a time is **shown**.
 
 ## Modules
 
-**Riot player data** (`RiotPlayerData`): every call to Riot's game endpoints for the signed-in account. Hides the session, client version, hosts, headers, token renewal and expiry. Tests substitute the transport through the `OkHttpClient`.
+**Riot player data** (`RiotPlayerData`): every call to Riot's game endpoints for one signed-in account. Hides the session, client version, hosts, headers, token renewal and expiry. Tests substitute the transport through the `OkHttpClient`.
 
-**Account session** (`Account`): who is signed in. Restores, completes and ends sign-in, and clears the account's local data when it ends.
+**Riot sign-in** (`RiotSignIn`): turns tokens from Riot's sign-in redirect into a session, for a new sign-in and for every renewal.
+
+**Account session** (`Account`): who is signed in and which account is shown. Restores, adds, switches and ends sign-ins, and clears an account's local data when it ends.
 
 **Content** (`Content`): the current patch's names and art, with version discovery and per-version caching. Falls back to the last index when valorant-api.com is unreachable.
 
@@ -40,6 +46,8 @@ Domain language for Radianite. Module names in code follow these terms.
 
 **Match History** (`MatchHistory`): the account's matches from its point of view. Pages through them, caches finished matches and attaches ranked rating changes.
 
-**Local store** (`LocalStore`): every file the app keeps, declared once in `Slots` with its lifetime: account data is cleared on sign-out, device data survives it.
+**Local store** (`LocalStore`): every file the app keeps, declared once in `Slots` with its lifetime: account data lives in that account's own store (`forAccount`) and is cleared on sign-out; device data survives it.
+
+**Store sync** (`StoreSync`): fetches every signed-in account's store in the background after each rotation, feeding the home-screen widget (`StoreWidget`) and wishlist announcements.
 
 **Failure** (`Failure`): why a load failed, in the terms the app reacts to: expired, maintenance, rate-limited, offline, a Riot error, or other.

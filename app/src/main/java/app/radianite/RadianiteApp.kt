@@ -17,13 +17,19 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.radianite.data.LocalStore
 import app.radianite.data.account.Account
+import app.radianite.data.account.AccountState
+import app.radianite.data.account.SignInCookies
 import app.radianite.data.content.Content
 import app.radianite.data.match.MatchHistory
 import app.radianite.data.player.PlayerRepository
+import app.radianite.data.riot.AccountCookies
 import app.radianite.data.riot.RiotAuth
-import app.radianite.data.riot.RiotCookies
 import app.radianite.data.riot.RiotPlayerData
+import app.radianite.data.riot.RiotSignIn
 import app.radianite.data.store.StoreRepository
+import app.radianite.data.store.Wishlist
+import app.radianite.sync.StoreSync
+import app.radianite.widget.StoreWidget
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -32,12 +38,17 @@ import coil3.request.crossfade
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.Cache
 import okhttp3.OkHttpClient
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
@@ -48,6 +59,8 @@ class RadianiteApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        StoreSync.createChannel(this)
+        container.startBackgroundWork()
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader =
@@ -62,6 +75,9 @@ class RadianiteApp : Application(), SingletonImageLoader.Factory {
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
 
+    /** For work that lasts as long as the process: the Account session and background scheduling. */
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     val json = Json {
         ignoreUnknownKeys = true
         explicitNulls = false
@@ -75,29 +91,63 @@ class AppContainer(context: Context) {
             .build()
     }
 
-    private val local by lazy { LocalStore(appContext.filesDir, json) }
-    private val cookies = WebViewRiotCookies()
+    /** The app's own store; each account's data sits in a store of its own. */
+    val device by lazy { LocalStore(appContext.filesDir, json) }
 
-    val content: Content by lazy { Content(http, json, local) }
+    val content: Content by lazy { Content(http, json, device) }
 
-    private val riot: RiotPlayerData by lazy {
-        RiotPlayerData(
+    private val riotSignIn by lazy { RiotSignIn(http, json) }
+
+    private val accounts = ConcurrentHashMap<String, AccountData>()
+
+    /** [puuid]'s data modules, created the first time anything asks for that account. */
+    fun accountData(puuid: String): AccountData = accounts.computeIfAbsent(puuid) { AccountData(it) }
+
+    val account: Account by lazy {
+        Account(device, riotSignIn, WebViewSignInCookies(), riotFor = { accountData(it).riot }, appScope)
+    }
+
+    val wishlist: Wishlist by lazy { Wishlist(device) }
+
+    /** One signed-in account's Riot connection and the data modules over it. */
+    inner class AccountData(puuid: String) {
+        private val local = device.forAccount(puuid)
+
+        val riot = RiotPlayerData(
             http = http,
             json = json,
-            cookies = cookies,
+            cookies = AccountCookies(local),
             store = local,
+            signIn = riotSignIn,
             userAgent = { WebSettings.getDefaultUserAgent(appContext) },
             clientVersion = content::version,
         )
+
+        val store = StoreRepository(riot, content, local, device, onRefreshed = { StoreWidget.refresh(appContext) })
+
+        val matches = MatchHistory(riot, local)
+
+        val players = PlayerRepository(riot, content, matches)
     }
 
-    val account: Account by lazy { Account(riot, cookies, local, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)) }
-
-    val store: StoreRepository by lazy { StoreRepository(riot, content, local) }
-
-    val matches: MatchHistory by lazy { MatchHistory(riot, local) }
-
-    val players: PlayerRepository by lazy { PlayerRepository(riot, content, matches) }
+    /**
+     * Keeps the background store sync scheduled while any account is signed in, and redraws the widget
+     * whenever the shown account changes.
+     */
+    fun startBackgroundWork() {
+        appScope.launch {
+            account.ready()
+            account.saved.map { it.isNotEmpty() }.distinctUntilChanged().collect { signedIn ->
+                if (signedIn) StoreSync.schedule(appContext) else StoreSync.cancel(appContext)
+            }
+        }
+        appScope.launch {
+            account.state.filter { it != AccountState.Unknown && it != AccountState.CompletingSignIn }
+                .map { (it as? AccountState.SignedIn)?.puuid }
+                .distinctUntilChanged()
+                .collect { StoreWidget.refresh(appContext) }
+        }
+    }
 
     // SimpleCache must be a single instance per directory for the whole process.
     private val videoCache: SimpleCache by lazy {
@@ -120,20 +170,17 @@ class AppContainer(context: Context) {
     }
 }
 
-private class WebViewRiotCookies : RiotCookies {
-    override suspend fun header(): String? = withContext(Dispatchers.Main) {
-        CookieManager.getInstance().getCookie(RiotAuth.COOKIE_URL)?.takeIf { it.isNotBlank() }
+/** The sign-in page's cookies live in the WebView's cookie store, which must be used on the main thread. */
+private class WebViewSignInCookies : SignInCookies {
+    override suspend fun take(): String? = withContext(Dispatchers.Main) {
+        val header = CookieManager.getInstance().getCookie(RiotAuth.COOKIE_URL)?.takeIf { it.isNotBlank() }
+        clearNow()
+        header
     }
 
-    override suspend fun store(setCookies: List<String>) = withContext(Dispatchers.Main) {
-        val manager = CookieManager.getInstance()
-        setCookies.forEach { manager.setCookie(RiotAuth.COOKIE_URL, it) }
-        manager.flush()
-    }
+    override suspend fun clear() = withContext(Dispatchers.Main) { clearNow() }
 
-    override suspend fun flush() = withContext(Dispatchers.Main) { CookieManager.getInstance().flush() }
-
-    override suspend fun clear() = withContext(Dispatchers.Main) {
+    private suspend fun clearNow() {
         val manager = CookieManager.getInstance()
         suspendCancellableCoroutine { cont -> manager.removeAllCookies { cont.resume(Unit) } }
         manager.flush()

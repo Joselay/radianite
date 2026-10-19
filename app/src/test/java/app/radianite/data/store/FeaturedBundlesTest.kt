@@ -12,7 +12,7 @@ class FeaturedBundlesTest {
 
     private val catalog = buildCatalog(
         version = "release-13.08",
-        skins = emptyList(),
+        weapons = emptyList(),
         tiers = emptyList(),
         bundles = listOf(
             ApiBundle("f67ab55a-4480-f305-9891-9bac1b17459f", "Popmonz", verticalPromoImage = "popmonz.png"),

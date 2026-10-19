@@ -3,8 +3,6 @@ package app.radianite.data.riot
 import app.radianite.data.LocalStore
 import app.radianite.data.Slots
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -16,20 +14,22 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.Base64
 
-/** The Riot session cookies live in the WebView's cookie store; this is the seam to it. */
+/** An account's Riot session cookies, which silent renewal signs in with. */
 interface RiotCookies {
+    /** The cookies as a Cookie header, or null when there are none. */
     suspend fun header(): String?
-    suspend fun store(setCookies: List<String>)
 
-    /** Persists cookies the sign-in WebView just received, so silent renewal can use them. */
-    suspend fun flush()
+    /** Starts over with the cookies in [header], as the sign-in page left them. */
+    suspend fun replace(header: String?)
+
+    /** Merges in Set-Cookie headers from a renewal. */
+    suspend fun store(setCookies: List<String>)
     suspend fun clear()
 }
 
@@ -43,7 +43,7 @@ object ItemTypes {
 }
 
 /**
- * The signed-in account's VALORANT player data. Callers ask for the thing they want; this module finds a
+ * One signed-in account's VALORANT player data. Callers ask for the thing they want; this module finds a
  * valid session, picks the shard and region hosts, sends the game client's headers, renews rejected tokens
  * once (shared by every call that hit the same rejection), and reports a session that can't be renewed as
  * [SessionExpiredException], also announced on [expired].
@@ -55,7 +55,9 @@ class RiotPlayerData(
     private val http: OkHttpClient,
     private val json: Json,
     private val cookies: RiotCookies,
+    /** The account's own store, where its session is kept. */
     private val store: LocalStore,
+    private val signIn: RiotSignIn,
     private val userAgent: () -> String,
     /** Current client version for X-Riot-ClientVersion. */
     private val clientVersion: suspend () -> String,
@@ -81,8 +83,11 @@ class RiotPlayerData(
     /** The signed-in player's PUUID. */
     suspend fun puuid(): String = expiring { (savedSession() ?: throw SessionExpiredException()).puuid }
 
-    /** Exchanges the tokens from Riot's sign-in redirect for a saved session. */
-    suspend fun signIn(tokens: AuthTokens): RiotSession = mutex.withLock { establish(tokens, previous = null) }
+    /** Takes over a session just signed in, with the cookies the sign-in page set. */
+    suspend fun adopt(session: RiotSession, cookieHeader: String?) = mutex.withLock {
+        cookies.replace(cookieHeader)
+        save(session)
+    }
 
     /** Forgets the tokens and the Riot cookies. Waits for any renewal in flight, so it can't resurrect them. */
     suspend fun signOut() = mutex.withLock {
@@ -97,14 +102,18 @@ class RiotPlayerData(
     suspend fun wallet(): WalletResponse =
         call(WalletResponse.serializer()) { pd(it, "store/v1/wallet/${it.puuid}") }
 
+    /** Everything the store sells and its full price; not per account, but only reachable signed in. */
+    suspend fun offers(): OffersResponse =
+        call(OffersResponse.serializer()) { pd(it, "store/v1/offers/") }
+
     /** [itemTypeId] is one of the [ItemTypes] constants. */
     suspend fun ownedItems(itemTypeId: String): OwnedItemsResponse =
         call(OwnedItemsResponse.serializer()) { pd(it, "store/v1/entitlements/${it.puuid}/$itemTypeId") }
 
-    /** Newest first. Riot caps a page at 20 matches. */
-    suspend fun matchHistory(startIndex: Int, count: Int): MatchHistoryResponse =
+    /** Newest first, only [queue]'s matches when it's set (e.g. "competitive"). Riot caps a page at 20 matches. */
+    suspend fun matchHistory(startIndex: Int, count: Int, queue: String? = null): MatchHistoryResponse =
         call(MatchHistoryResponse.serializer()) {
-            pd(it, "match-history/v1/history/${it.puuid}?startIndex=$startIndex&endIndex=${startIndex + count}")
+            pd(it, "match-history/v1/history/${it.puuid}?startIndex=$startIndex&endIndex=${startIndex + count}" + (queue?.let { q -> "&queue=$q" } ?: ""))
         }
 
     suspend fun matchDetails(matchId: String): MatchDetailsResponse =
@@ -207,7 +216,7 @@ class RiotPlayerData(
         val cookieHeader = cookies.header() ?: throw SessionExpiredException()
         val reauth = reauthorize(cookieHeader) ?: throw SessionExpiredException()
         cookies.store(reauth.setCookies)
-        establish(reauth.tokens, previous = current)
+        save(signIn.session(reauth.tokens, previous = current))
     }
 
     /**
@@ -227,60 +236,13 @@ class RiotPlayerData(
         }
     }
 
-    private suspend fun establish(tokens: AuthTokens, previous: RiotSession?): RiotSession = coroutineScope {
-        val info = async { userInfo(tokens.accessToken) }
-        val entitlements = async { entitlementsToken(tokens.accessToken) }
-        val region = async { previous?.region ?: liveAffinity(tokens.accessToken, tokens.idToken) }
-        val user = info.await()
-        RiotSession(
-            accessToken = tokens.accessToken,
-            idToken = tokens.idToken,
-            expiresAtMillis = clock() + tokens.expiresInSeconds * 1000,
-            entitlementsToken = entitlements.await(),
-            puuid = user.sub,
-            gameName = user.acct?.gameName,
-            tagLine = user.acct?.tagLine,
-            shard = previous?.shard ?: RiotAuth.shardForAffinity(region.await()),
-            region = region.await(),
-        ).also {
-            session = it
-            store.write(Slots.session, it)
-        }
+    private suspend fun save(session: RiotSession): RiotSession {
+        this.session = session
+        store.write(Slots.session, session)
+        return session
     }
 
-    private suspend fun userInfo(accessToken: String): UserInfoResponse =
-        execute(Request.Builder().url("https://auth.riotgames.com/userinfo").bearer(accessToken).build(), UserInfoResponse.serializer())
-
-    private suspend fun entitlementsToken(accessToken: String): String =
-        execute(
-            Request.Builder().url("https://entitlements.auth.riotgames.com/api/token/v1").bearer(accessToken).post(EMPTY_JSON).build(),
-            EntitlementsResponse.serializer(),
-        ).entitlementsToken
-
-    /** The account's live region affinity, e.g. "ap", "na", "eu". */
-    private suspend fun liveAffinity(accessToken: String, idToken: String): String {
-        val body = """{"id_token":"$idToken"}""".toRequestBody(JSON_MEDIA)
-        val response = execute(
-            Request.Builder().url("https://riot-geo.pas.si.riotgames.com/pas/v1/product/valorant").bearer(accessToken).put(body).build(),
-            PasResponse.serializer(),
-        )
-        return response.affinities["live"] ?: throw RiotHttpException(200, null, "Riot didn't return a region for this account")
-    }
-
-    private suspend fun <T> execute(request: Request, deserializer: DeserializationStrategy<T>): T = withContext(Dispatchers.IO) {
-        http.newCall(request).execute().use { response ->
-            val body = response.body.string()
-            if (!response.isSuccessful) {
-                val error = runCatching { json.decodeFromString(RiotErrorBody.serializer(), body) }.getOrNull()
-                throw RiotHttpException(
-                    status = response.code,
-                    errorCode = error?.errorCode,
-                    message = error?.message ?: "HTTP ${response.code} from ${request.url.host}",
-                )
-            }
-            json.decodeFromString(deserializer, body)
-        }
-    }
+    private suspend fun <T> execute(request: Request, deserializer: DeserializationStrategy<T>): T = http.fetch(json, request, deserializer)
 
     private fun pd(session: RiotSession, path: String) = "https://pd.${session.shard}.a.pvp.net/$path"
 
@@ -297,15 +259,12 @@ class RiotPlayerData(
             .method(method, body)
             .build()
 
-    private fun Request.Builder.bearer(token: String) = header("Authorization", "Bearer $token")
-
     /** Result of a cookie-based silent sign-in: fresh tokens plus any rotated cookies. */
     private class Reauthorization(val tokens: AuthTokens, val setCookies: List<String>)
 
     private companion object {
         const val TOKEN_MARGIN_MILLIS = 2 * 60 * 1000L
 
-        val JSON_MEDIA = "application/json".toMediaType()
         val EMPTY_JSON = "{}".toRequestBody(JSON_MEDIA)
 
         // Same shape the PC client sends: tab-indented JSON with CRLF line endings, base64-encoded.

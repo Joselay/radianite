@@ -96,6 +96,12 @@ data class SkinsPanelLayout(
     @SerialName("SingleItemOffersRemainingDurationInSeconds") val remainingSeconds: Long = 0,
 )
 
+/** Every offer the store sells, at full price. */
+@Serializable
+data class OffersResponse(
+    @SerialName("Offers") val offers: List<StoreOffer> = emptyList(),
+)
+
 @Serializable
 data class StoreOffer(
     @SerialName("OfferID") val offerId: String,

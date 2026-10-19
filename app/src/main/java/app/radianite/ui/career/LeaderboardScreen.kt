@@ -20,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -39,6 +38,7 @@ import app.radianite.data.content.CardArt
 import app.radianite.data.player.Leaderboard
 import app.radianite.data.player.LeaderboardEntry
 import app.radianite.data.player.PlayerRepository
+import app.radianite.ui.common.BackButton
 import app.radianite.ui.common.LoadingPane
 import app.radianite.ui.common.MessageBanner
 import app.radianite.ui.common.RankIcon
@@ -113,7 +113,7 @@ fun LeaderboardScreen(viewModel: LeaderboardViewModel, onBack: () -> Unit) {
                         }
                     }
                 },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Back", color = Muted) } },
+                navigationIcon = { BackButton(onBack) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },

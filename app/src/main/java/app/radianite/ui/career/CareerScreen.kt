@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -52,6 +51,7 @@ import app.radianite.data.player.RR_PER_TIER
 import app.radianite.data.player.RankStatus
 import app.radianite.data.player.XP_PER_ACCOUNT_LEVEL
 import app.radianite.ui.VersionLabel
+import app.radianite.ui.common.AccountsButton
 import app.radianite.ui.common.AgentIcon
 import app.radianite.ui.common.LocalGameContent
 import app.radianite.ui.common.MessageBanner
@@ -59,6 +59,7 @@ import app.radianite.ui.common.ProgressBar
 import app.radianite.ui.common.RankIcon
 import app.radianite.ui.common.RankName
 import app.radianite.ui.common.SectionHeader
+import app.radianite.ui.common.Skeleton
 import app.radianite.ui.common.StatTile
 import app.radianite.ui.common.WinGreen
 import app.radianite.ui.common.countdown
@@ -74,14 +75,14 @@ import coil3.compose.AsyncImage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CareerScreen(viewModel: CareerViewModel, onOpenLeaderboard: () -> Unit, onSignOut: () -> Unit) {
+fun CareerScreen(viewModel: CareerViewModel, onOpenLeaderboard: () -> Unit, onOpenAccounts: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Career", fontWeight = FontWeight.Bold) },
-                actions = { TextButton(onClick = onSignOut) { Text("Sign out", color = Muted) } },
+                actions = { AccountsButton(onOpenAccounts) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
@@ -102,6 +103,7 @@ fun CareerScreen(viewModel: CareerViewModel, onOpenLeaderboard: () -> Unit, onSi
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 state.message?.let { MessageBanner(it, Modifier.padding(bottom = 8.dp)) }
+                if (state.career == null && state.refreshing) CareerPlaceholder()
                 state.career?.let { career ->
                     IdentityBanner(career)
                     AccountProgress(career)
@@ -119,6 +121,16 @@ fun CareerScreen(viewModel: CareerViewModel, onOpenLeaderboard: () -> Unit, onSi
                 Box(Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) { VersionLabel() }
             }
         }
+    }
+}
+
+/** The banner, XP bar and rank card's shapes while the career loads. */
+@Composable
+private fun CareerPlaceholder() {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Skeleton(Modifier.fillMaxWidth().height(112.dp))
+        Skeleton(Modifier.fillMaxWidth().height(6.dp), RoundedCornerShape(3.dp))
+        Skeleton(Modifier.fillMaxWidth().height(200.dp).padding(top = 16.dp))
     }
 }
 
@@ -294,8 +306,8 @@ private fun RecentStats(stats: CareerStats?, loading: Boolean) {
     Column {
         SectionHeader("RECENT FORM" + (stats?.takeIf { it.matches > 0 }?.let { " · LAST ${it.matches} MATCHES" } ?: ""))
         when {
-            stats == null && loading -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+            stats == null && loading -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                repeat(3) { Skeleton(Modifier.weight(1f).height(58.dp), RoundedCornerShape(10.dp)) }
             }
             stats == null || stats.matches == 0 -> Text("Play a few matches to see your stats here.", color = Muted)
             else -> {

@@ -15,10 +15,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -49,9 +51,13 @@ import androidx.lifecycle.viewModelScope
 import app.radianite.data.player.EquippedWeapon
 import app.radianite.data.player.PlayerCollection
 import app.radianite.data.player.PlayerRepository
+import app.radianite.data.player.SkinSort
 import app.radianite.data.store.StoreSkin
+import app.radianite.ui.common.AccountsButton
+import app.radianite.ui.common.HudChip
 import app.radianite.ui.common.MessageBanner
 import app.radianite.ui.common.SectionHeader
+import app.radianite.ui.common.Skeleton
 import app.radianite.ui.common.StatTile
 import app.radianite.ui.common.loadReporting
 import app.radianite.ui.theme.InkRaised
@@ -96,16 +102,19 @@ class CollectionViewModel(private val repository: PlayerRepository) : ViewModel(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CollectionScreen(viewModel: CollectionViewModel, onOpenSkin: (StoreSkin) -> Unit) {
+fun CollectionScreen(viewModel: CollectionViewModel, onOpenAccounts: () -> Unit, onOpenSkin: (StoreSkin) -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
+    var weaponId by rememberSaveable { mutableStateOf<String?>(null) }
+    var sort by rememberSaveable { mutableStateOf(SkinSort.NAME) }
     val collection = state.collection
-    val skins = remember(collection, query) { collection?.search(query).orEmpty() }
+    val skins = remember(collection, query, weaponId, sort) { collection?.search(query, weaponId, sort).orEmpty() }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Collection", fontWeight = FontWeight.Bold) },
+                actions = { AccountsButton(onOpenAccounts) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
@@ -125,15 +134,21 @@ fun CollectionScreen(viewModel: CollectionViewModel, onOpenSkin: (StoreSkin) -> 
                 modifier = Modifier.fillMaxSize(),
             ) {
                 state.message?.let { item(key = "message", span = { GridItemSpan(maxLineSpan) }) { MessageBanner(it) } }
+                if (collection == null && state.refreshing) {
+                    item(key = "counts-skeleton", span = { GridItemSpan(maxLineSpan) }) { Skeleton(Modifier.fillMaxWidth().height(58.dp), RoundedCornerShape(10.dp)) }
+                    items(PLACEHOLDER_TILES, key = { "skeleton-$it" }) { Skeleton(Modifier.fillMaxWidth().height(110.dp), RoundedCornerShape(10.dp)) }
+                }
                 if (collection != null) {
                     item(key = "counts", span = { GridItemSpan(maxLineSpan) }) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            StatTile("SKINS OWNED", "${collection.skins.size}", Modifier.weight(1f))
+                            StatTile("SKINS", "${collection.skins.size}", Modifier.weight(1f))
                             StatTile(
                                 "AGENTS",
                                 collection.ownedAgents?.let { "$it / ${collection.totalAgents}" } ?: "–",
                                 Modifier.weight(1f),
                             )
+                            // What the skins Riot sells would cost today; battle pass and free skins don't count.
+                            StatTile("VALUE · VP", collection.valueVp?.let { "%,d".format(it) } ?: "–", Modifier.weight(1.3f))
                         }
                     }
                     if (collection.loadout.isNotEmpty()) {
@@ -143,8 +158,8 @@ fun CollectionScreen(viewModel: CollectionViewModel, onOpenSkin: (StoreSkin) -> 
                         }
                     }
                     item(key = "owned-header", span = { GridItemSpan(maxLineSpan) }) {
-                        Column {
-                            SectionHeader("OWNED SKINS")
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SectionHeader("OWNED SKINS", Modifier.padding(bottom = 0.dp))
                             OutlinedTextField(
                                 value = query,
                                 onValueChange = { query = it },
@@ -152,13 +167,31 @@ fun CollectionScreen(viewModel: CollectionViewModel, onOpenSkin: (StoreSkin) -> 
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                             )
+                            if (collection.weapons.size > 1) {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    item(key = "all") { HudChip("All weapons", selected = weaponId == null, onClick = { weaponId = null }) }
+                                    items(collection.weapons, key = { it.weaponId }) { weapon ->
+                                        HudChip(weapon.name, selected = weaponId == weapon.weaponId, onClick = { weaponId = weapon.weaponId })
+                                    }
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("SORT", fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.sp, color = Muted)
+                                SkinSort.entries.forEach { option ->
+                                    HudChip(option.label, selected = sort == option, onClick = { sort = option })
+                                }
+                            }
                         }
                     }
                     items(skins, key = { "owned-" + it.levelUuid }) { skin -> SkinTile(skin, onClick = { onOpenSkin(skin) }) }
                     if (skins.isEmpty()) {
                         item(key = "no-skins", span = { GridItemSpan(maxLineSpan) }) {
                             Text(
-                                if (query.isBlank()) "No skins yet." else "No owned skins match \"$query\".",
+                                when {
+                                    query.isNotBlank() -> "No owned skins match \"$query\"."
+                                    weaponId != null -> "No skins for this weapon yet."
+                                    else -> "No skins yet."
+                                },
                                 color = Muted,
                                 modifier = Modifier.padding(vertical = 16.dp),
                             )
@@ -220,5 +253,15 @@ private fun SkinTile(skin: StoreSkin, onClick: () -> Unit) {
             }
             Text(skin.name, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+        skin.priceVp?.let { Text("%,d VP".format(it), fontFamily = Mono, fontSize = 10.sp, color = Muted, modifier = Modifier.padding(top = 2.dp)) }
     }
 }
+
+private val SkinSort.label: String
+    get() = when (this) {
+        SkinSort.NAME -> "Name"
+        SkinSort.RARITY -> "Rarity"
+        SkinSort.PRICE -> "Price"
+    }
+
+private const val PLACEHOLDER_TILES = 6

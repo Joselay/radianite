@@ -1,5 +1,11 @@
 package app.radianite.ui.common
 
+import android.provider.Settings
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,21 +16,34 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.radianite.R
 import app.radianite.data.content.GameContent
 import app.radianite.data.match.Outcome
 import app.radianite.ui.theme.Display
@@ -34,6 +53,7 @@ import app.radianite.ui.theme.Muted
 import app.radianite.ui.theme.ValorantRed
 import app.radianite.ui.theme.rgbaColor
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.delay
 
 /** The current patch's names and art, from the Content module; null until it first loads. */
 val LocalGameContent = compositionLocalOf<GameContent?> { null }
@@ -77,6 +97,77 @@ fun MessageBanner(message: String, modifier: Modifier = Modifier) {
             .background(ValorantRed.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
             .padding(12.dp),
     )
+}
+
+/** The top bar's way back from an overlay. */
+@Composable
+fun BackButton(onBack: () -> Unit) {
+    IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back") }
+}
+
+/** Opens the accounts sheet: switching, adding and signing out. */
+@Composable
+fun AccountsButton(onClick: () -> Unit) {
+    IconButton(onClick = onClick) { Icon(painterResource(R.drawable.ic_account), contentDescription = "Accounts", tint = Muted) }
+}
+
+/** A filter chip in the app's colors: red when picked, quiet otherwise. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HudChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = InkRaised,
+            labelColor = Muted,
+            selectedContainerColor = ValorantRed.copy(alpha = 0.18f),
+            selectedLabelColor = ValorantRed,
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = Color.Transparent,
+            selectedBorderColor = ValorantRed.copy(alpha = 0.5f),
+        ),
+    )
+}
+
+/** The current time, updated every [intervalMillis] while on screen, for countdowns that should keep moving. */
+@Composable
+fun rememberNow(intervalMillis: Long): State<Long> = produceState(System.currentTimeMillis(), intervalMillis) {
+    while (true) {
+        delay(intervalMillis - System.currentTimeMillis() % intervalMillis)
+        value = System.currentTimeMillis()
+    }
+}
+
+/** False when the user has turned system animations off; autoplay and loops then hold still. */
+@Composable
+fun rememberMotionEnabled(): Boolean {
+    val context = LocalContext.current
+    return remember {
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f
+    }
+}
+
+/** A placeholder block that pulses gently while its content loads; holds still when animations are off. */
+@Composable
+fun Skeleton(modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(12.dp)) {
+    val motion = rememberMotionEnabled()
+    val alpha = if (motion) {
+        val pulse by rememberInfiniteTransition(label = "skeleton").animateFloat(
+            initialValue = 0.45f,
+            targetValue = 0.9f,
+            animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+            label = "skeleton-alpha",
+        )
+        pulse
+    } else {
+        0.7f
+    }
+    Box(modifier.graphicsLayer { this.alpha = alpha }.clip(shape).background(InkRaised))
 }
 
 @Composable

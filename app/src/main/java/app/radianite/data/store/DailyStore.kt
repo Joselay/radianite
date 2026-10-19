@@ -39,6 +39,7 @@ data class NightMarketOffer(
     val discountPercent: Int,
 )
 
+@Serializable
 data class Wallet(val valorantPoints: Int, val radianite: Int, val kingdomCredits: Int)
 
 fun WalletResponse.toWallet() = Wallet(
