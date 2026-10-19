@@ -57,6 +57,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // The app is in English only; this drops the translations its libraries bring.
+    androidResources {
+        localeFilters += "en"
+    }
+
+    // Metadata only Kotlin reflection, debuggers and build tools read; the libraries' licenses stay.
+    packaging {
+        resources.excludes += listOf("kotlin/**.kotlin_builtins", "META-INF/*.version", "DebugProbesKt.bin", "kotlin-tooling-metadata.json")
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true

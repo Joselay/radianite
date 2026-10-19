@@ -14,7 +14,14 @@ import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.RenderersFactory
+import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
+import androidx.media3.extractor.ExtractorsFactory
+import androidx.media3.extractor.mp4.Mp4Extractor
+import androidx.media3.extractor.text.SubtitleParser
 import app.radianite.data.LocalStore
 import app.radianite.data.account.Account
 import app.radianite.data.account.AccountState
@@ -158,15 +165,30 @@ class AppContainer(context: Context) {
         )
     }
 
-    /** Skin preview videos stream from Riot's CDN; replays come from the disk cache. */
+    /**
+     * Skin preview videos stream from Riot's CDN; replays come from the disk cache. Every one is an MP4 with
+     * sound, so the player gets only a video and an audio renderer and the MP4 extractor, which leaves the
+     * rest of Media3 out of the app.
+     */
     fun newVideoPlayer(context: Context): ExoPlayer {
         val dataSource = CacheDataSource.Factory()
             .setCache(videoCache)
             .setUpstreamDataSourceFactory(OkHttpDataSource.Factory(http.newBuilder().cache(null).build()))
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-        return ExoPlayer.Builder(context)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource))
-            .build()
+        val renderers = RenderersFactory { handler, video, audio, _, _ ->
+            arrayOf(
+                MediaCodecVideoRenderer(context, MediaCodecSelector.DEFAULT, VIDEO_JOINING_MILLIS, handler, video, DROPPED_FRAMES_TO_REPORT),
+                MediaCodecAudioRenderer(context, MediaCodecSelector.DEFAULT, handler, audio),
+            )
+        }
+        val mp4 = ProgressiveMediaSource.Factory(dataSource, ExtractorsFactory { arrayOf(Mp4Extractor(SubtitleParser.Factory.UNSUPPORTED)) })
+        return ExoPlayer.Builder(context, renderers, mp4).build()
+    }
+
+    private companion object {
+        // Media3's own defaults, from DefaultRenderersFactory.
+        const val VIDEO_JOINING_MILLIS = 5_000L
+        const val DROPPED_FRAMES_TO_REPORT = 50
     }
 }
 
