@@ -1,6 +1,7 @@
 package app.radianite.ui.common
 
 import android.provider.Settings
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -9,11 +10,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -21,6 +25,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,12 +42,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -194,7 +208,7 @@ fun ErrorPane(message: String, onRetry: () -> Unit, modifier: Modifier = Modifie
     }
 }
 
-/** A labelled number, e.g. "K/D" over "1.24". */
+/** A labelled number, e.g. "K/D" over "1.24"; with a [currency], its icon leads the number. */
 @Composable
 fun StatTile(
     label: String,
@@ -202,6 +216,7 @@ fun StatTile(
     modifier: Modifier = Modifier,
     valueColor: Color = Color.Unspecified,
     background: Color = InkRaised,
+    currency: Currency? = null,
 ) {
     Column(
         modifier
@@ -210,7 +225,18 @@ fun StatTile(
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Text(label, fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.sp, color = Muted)
-        Text(value, fontFamily = Display, fontSize = 22.sp, color = valueColor)
+        if (currency == null) {
+            Text(value, fontFamily = Display, fontSize = 22.sp, color = valueColor)
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "$value ${currency.spokenName}" },
+            ) {
+                Icon(painterResource(currency.icon), contentDescription = null, tint = valueColor.takeOrElse { LocalContentColor.current }, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(value, fontFamily = Display, fontSize = 22.sp, color = valueColor)
+            }
+        }
     }
 }
 
@@ -277,14 +303,15 @@ fun shortDuration(millis: Long): String {
     return if (totalMinutes < 60) "${totalMinutes}m" else "%dh %02dm".format(totalMinutes / 60, totalMinutes % 60)
 }
 
-/** "2d 4h", "5h 12m", "8m": coarse countdowns for multi-day timers. */
+/** "2d 4h", "5h 02m", "8m", "<1m": coarse countdowns that never read as a clock time. */
 fun countdown(millis: Long): String {
     val minutes = (millis / 60_000).coerceAtLeast(0)
     val days = minutes / (60 * 24)
     val hours = (minutes / 60) % 24
     return when {
         days > 0 -> "${days}d ${hours}h"
-        hours > 0 -> "${hours}h ${minutes % 60}m"
+        hours > 0 -> "%dh %02dm".format(hours, minutes % 60)
+        minutes == 0L && millis > 0 -> "<1m"
         else -> "${minutes}m"
     }
 }
@@ -293,3 +320,44 @@ fun countdown(millis: Long): String {
 fun plural(count: Int, one: String, many: String) = "$count ${if (count == 1) one else many}"
 
 fun signed(value: Int): String = if (value > 0) "+$value" else value.toString()
+
+/** VALORANT's currencies. Their icons ship with the app, so amounts draw at once, with no download. */
+enum class Currency(@DrawableRes val icon: Int, val spokenName: String) {
+    VALORANT_POINTS(R.drawable.ic_currency_vp, "VALORANT Points"),
+    RADIANITE_POINTS(R.drawable.ic_currency_rp, "Radianite Points"),
+    KINGDOM_CREDITS(R.drawable.ic_currency_kc, "Kingdom Credits"),
+}
+
+/**
+ * [amount] after its currency's icon, as the game shows prices, rather than with a "VP" after it. The icon
+ * takes the text's color and grows with its size; screen readers hear "1,275 VALORANT Points". A [prefix],
+ * such as "NEED", goes before the icon.
+ */
+@Composable
+fun Amount(
+    amount: Int,
+    modifier: Modifier = Modifier,
+    currency: Currency = Currency.VALORANT_POINTS,
+    color: Color = Color.Unspecified,
+    fontSize: TextUnit = TextUnit.Unspecified,
+    fontWeight: FontWeight? = null,
+    fontFamily: FontFamily? = null,
+    style: TextStyle = LocalTextStyle.current,
+    prefix: String? = null,
+) {
+    val text = style.merge(TextStyle(color = color, fontSize = fontSize, fontWeight = fontWeight, fontFamily = fontFamily))
+    val tint = text.color.takeOrElse { LocalContentColor.current }
+    val iconSize = with(LocalDensity.current) { (if (text.fontSize.isSpecified) text.fontSize else 14.sp).toDp() }
+    val formatted = "%,d".format(amount)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.semantics(mergeDescendants = true) {
+            contentDescription = listOfNotNull(prefix, formatted, currency.spokenName).joinToString(" ")
+        },
+    ) {
+        prefix?.let { Text("$it ", style = text, color = tint, maxLines = 1) }
+        Icon(painterResource(currency.icon), contentDescription = null, tint = tint, modifier = Modifier.size(iconSize))
+        Spacer(Modifier.width(iconSize * 0.3f))
+        Text(formatted, style = text, color = tint, maxLines = 1)
+    }
+}

@@ -25,6 +25,14 @@ class SkinDetailTest {
     }
 
     @Test
+    fun `says which level unlocks a variant, when its name tells`() {
+        assertEquals("Unlocks at Level 4", chromaUnlock("Elderflame Vandal Level 4\n(Variant 1 Red)", 1))
+        assertEquals("Unlocks at Level 5", chromaUnlock("RGX 11z Pro Vandal Level 5\r\n(Variant 2 Blue)", 2))
+        assertNull(chromaUnlock("Comet Odin\r\n(Variant 1 Red)", 1))
+        assertNull(chromaUnlock("Elderflame Vandal", 0))
+    }
+
+    @Test
     fun `maps levels and chromas with videos`() {
         val detail = ApiSkinDetail(
             uuid = "s1",
@@ -47,5 +55,6 @@ class SkinDetailTest {
         assertEquals(listOf("Default", "Green"), detail.chromas.map { it.title })
         assertNull(detail.chromas[0].videoUrl)
         assertEquals("green.mp4", detail.chromas[1].videoUrl)
+        assertEquals(listOf(null, "Unlocks at Level 4"), detail.chromas.map { it.subtitle })
     }
 }

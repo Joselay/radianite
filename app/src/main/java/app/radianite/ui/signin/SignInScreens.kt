@@ -109,6 +109,7 @@ import app.radianite.data.riot.RiotAuth
 import app.radianite.data.store.FeaturedBundle
 import app.radianite.data.store.millisUntilStoreReset
 import app.radianite.ui.VersionLabel
+import app.radianite.ui.common.countdown
 import app.radianite.ui.common.rememberMotionEnabled
 import app.radianite.ui.common.rememberNow
 import app.radianite.ui.theme.Bone
@@ -366,8 +367,8 @@ private fun ProgressBars(count: Int, active: Int, activeFill: () -> Float) {
 /** Time until the daily offers rotate, which happens at 00:00 UTC. */
 @Composable
 private fun ResetChip(motion: Boolean) {
-    val now by rememberNow(1_000)
-    val s = millisUntilStoreReset(now) / 1000
+    // The rotation falls on a minute boundary, so ticking on each minute keeps it exact.
+    val now by rememberNow(60_000)
     Row(
         Modifier
             .border(1.dp, Bone.copy(alpha = 0.15f))
@@ -388,7 +389,7 @@ private fun ResetChip(motion: Boolean) {
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            "RESET %02d:%02d:%02d".format(s / 3600, s % 3600 / 60, s % 60),
+            "RESETS IN ${countdown(millisUntilStoreReset(now)).uppercase()}",
             fontFamily = Mono,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,

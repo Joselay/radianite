@@ -48,7 +48,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -66,6 +68,7 @@ import androidx.media3.ui.compose.PlayerSurface
 import app.radianite.R
 import app.radianite.data.content.SkinVariant
 import app.radianite.data.store.StoreSkin
+import app.radianite.ui.common.Amount
 import app.radianite.ui.common.BackButton
 import app.radianite.ui.theme.InkRaised
 import app.radianite.ui.theme.Muted
@@ -96,8 +99,10 @@ fun SkinDetailScreen(
                 title = {
                     Column {
                         Text(skin.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        val subtitle = listOfNotNull(skin.tierName, skin.priceVp?.let { "%,d VP".format(it) }).joinToString(" · ")
-                        if (subtitle.isNotEmpty()) Text(subtitle, style = MaterialTheme.typography.labelMedium, color = accent)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            skin.tierName?.let { Text(if (skin.priceVp != null) "$it · " else it, style = MaterialTheme.typography.labelMedium, color = accent) }
+                            skin.priceVp?.let { Amount(it, style = MaterialTheme.typography.labelMedium, color = accent) }
+                        }
                     }
                 },
                 navigationIcon = { BackButton(onBack) },
@@ -147,13 +152,12 @@ private fun LoadedDetail(
 ) {
     Column(Modifier.fillMaxSize()) {
         // The stage stays pinned while the variant list scrolls underneath.
-        PreviewStage(state.selected, newPlayer)
+        PreviewStage(state.selected, accent, newPlayer)
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), modifier = Modifier.weight(1f)) {
             item(key = "selected") {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Text(state.selected.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     state.selected.subtitle?.let { Text(it, color = accent) }
-                    if (state.selected.videoUrl == null) Text("No video for this one", color = Muted, style = MaterialTheme.typography.bodySmall)
                 }
             }
 
@@ -185,7 +189,7 @@ private fun LoadedDetail(
 // PlayerSurface is still marked unstable in media3-ui-compose.
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-private fun PreviewStage(variant: SkinVariant, newPlayer: (android.content.Context) -> ExoPlayer) {
+private fun PreviewStage(variant: SkinVariant, accent: Color, newPlayer: (android.content.Context) -> ExoPlayer) {
     val context = LocalContext.current
     val player = remember { newPlayer(context).apply { repeatMode = Player.REPEAT_MODE_ONE } }
     var buffering by remember { mutableStateOf(false) }
@@ -230,7 +234,9 @@ private fun PreviewStage(variant: SkinVariant, newPlayer: (android.content.Conte
         Modifier
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
-            .background(Color.Black)
+            // Video plays on black; a still image (Riot has no video for many variants) sits on the
+            // rarity gradient of the store cards, so it doesn't look like a video that failed to load.
+            .background(if (variant.videoUrl != null) SolidColor(Color.Black) else stillBackground(accent))
             .clickable(enabled = variant.videoUrl != null) { if (player.isPlaying) player.pause() else player.play() },
         contentAlignment = Alignment.Center,
     ) {
@@ -250,6 +256,10 @@ private fun PreviewStage(variant: SkinVariant, newPlayer: (android.content.Conte
         }
     }
 }
+
+@Composable
+private fun stillBackground(accent: Color): Brush =
+    remember(accent) { Brush.linearGradient(listOf(accent.copy(alpha = 0.35f), InkRaised, InkRaised)) }
 
 @Composable
 private fun SectionHeader(text: String) {

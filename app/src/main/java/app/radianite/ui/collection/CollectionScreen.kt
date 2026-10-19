@@ -54,6 +54,8 @@ import app.radianite.data.player.PlayerRepository
 import app.radianite.data.player.SkinSort
 import app.radianite.data.store.StoreSkin
 import app.radianite.ui.common.AccountsButton
+import app.radianite.ui.common.Amount
+import app.radianite.ui.common.Currency
 import app.radianite.ui.common.HudChip
 import app.radianite.ui.common.MessageBanner
 import app.radianite.ui.common.SectionHeader
@@ -148,7 +150,7 @@ fun CollectionScreen(viewModel: CollectionViewModel, onOpenAccounts: () -> Unit,
                                 Modifier.weight(1f),
                             )
                             // What the skins Riot sells would cost today; battle pass and free skins don't count.
-                            StatTile("VALUE · VP", collection.valueVp?.let { "%,d".format(it) } ?: "–", Modifier.weight(1.3f))
+                            StatTile("VALUE", collection.valueVp?.let { "%,d".format(it) } ?: "–", Modifier.weight(1.3f), currency = Currency.VALORANT_POINTS.takeIf { collection.valueVp != null })
                         }
                     }
                     if (collection.loadout.isNotEmpty()) {
@@ -253,7 +255,7 @@ private fun SkinTile(skin: StoreSkin, onClick: () -> Unit) {
             }
             Text(skin.name, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        skin.priceVp?.let { Text("%,d VP".format(it), fontFamily = Mono, fontSize = 10.sp, color = Muted, modifier = Modifier.padding(top = 2.dp)) }
+        skin.priceVp?.let { Amount(it, fontFamily = Mono, fontSize = 10.sp, color = Muted, modifier = Modifier.padding(top = 2.dp)) }
     }
 }
 

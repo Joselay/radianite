@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
@@ -31,12 +32,14 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import app.radianite.MainActivity
+import app.radianite.R
 import app.radianite.RadianiteApp
 import app.radianite.data.account.AccountState
 import app.radianite.data.store.DailyStore
@@ -51,8 +54,8 @@ import coil3.SingletonImageLoader
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.toBitmap
-import kotlinx.coroutines.CancellationException
 import java.util.Date
+import kotlinx.coroutines.CancellationException
 
 /**
  * Today's store for the shown account on the home screen, from the last store fetched, whether by the app
@@ -166,7 +169,18 @@ private fun SkinTile(skin: StoreSkin, art: Bitmap?, showName: Boolean, modifier:
         if (showName) {
             Text(skin.name, maxLines = 1, style = TextStyle(color = ColorProvider(Bone), fontSize = 11.sp, fontWeight = FontWeight.Medium))
         }
-        skin.priceVp?.let { Text("%,d VP".format(it), maxLines = 1, style = TextStyle(color = ColorProvider(tierColor), fontSize = 11.sp, fontWeight = FontWeight.Bold)) }
+        skin.priceVp?.let { price ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(
+                    ImageProvider(R.drawable.ic_currency_vp),
+                    contentDescription = "VALORANT Points",
+                    colorFilter = ColorFilter.tint(ColorProvider(tierColor)),
+                    modifier = GlanceModifier.size(11.dp),
+                )
+                Spacer(GlanceModifier.width(3.dp))
+                Text("%,d".format(price), maxLines = 1, style = TextStyle(color = ColorProvider(tierColor), fontSize = 11.sp, fontWeight = FontWeight.Bold))
+            }
+        }
     }
 }
 

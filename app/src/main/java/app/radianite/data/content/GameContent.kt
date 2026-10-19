@@ -170,8 +170,3 @@ object CardArt {
     fun wide(cardId: String?) = cardId?.takeIf { it.isNotBlank() }?.let { "https://media.valorant-api.com/playercards/$it/wideart.png" }
     fun small(cardId: String?) = cardId?.takeIf { it.isNotBlank() }?.let { "https://media.valorant-api.com/playercards/$it/smallart.png" }
 }
-
-/** Currency icons follow a fixed CDN path too. */
-object CurrencyArt {
-    fun icon(currencyUuid: String) = "https://media.valorant-api.com/currencies/$currencyUuid/displayicon.png"
-}

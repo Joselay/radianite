@@ -57,15 +57,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import app.radianite.R
-import app.radianite.data.content.CurrencyArt
-import app.radianite.data.store.KINGDOM_CREDITS_UUID
-import app.radianite.data.store.RADIANITE_POINTS_UUID
 import app.radianite.data.store.StoreBundle
 import app.radianite.data.store.StoreSkin
-import app.radianite.data.store.VALORANT_POINTS_UUID
 import app.radianite.data.store.Wallet
 import app.radianite.ui.VersionLabel
 import app.radianite.ui.common.AccountsButton
+import app.radianite.ui.common.Amount
+import app.radianite.ui.common.Currency
 import app.radianite.ui.common.MessageBanner
 import app.radianite.ui.common.SectionHeader
 import app.radianite.ui.common.Skeleton
@@ -185,8 +183,9 @@ private fun LazyGridScope.fullWidth(key: String, content: @Composable () -> Unit
     item(key = key, span = { GridItemSpan(maxLineSpan) }) { content() }
 
 /**
- * Ticks once a second in its own scope, so the cards below never recompose for the timer, and only while
- * the app is in front: a rollover that happened in the background refreshes the store on return.
+ * Ticks once a minute in its own scope, so the cards below never recompose for the timer, and only while
+ * the app is in front: a rollover that happened in the background refreshes the store on return. Minutes
+ * are enough for a reset hours away, and "14h 09m" can't be mistaken for a clock time as "14:09:24" can.
  */
 @Composable
 private fun ResetCountdown(expiresAtMillis: Long, onExpired: () -> Unit) {
@@ -201,24 +200,20 @@ private fun ResetCountdown(expiresAtMillis: Long, onExpired: () -> Unit) {
                     if (countedDown) onExpired()
                     break
                 }
-                delay(1_000 - System.currentTimeMillis() % 1_000)
+                // Wakes as the shown minute changes, and at the rollover itself.
+                delay(value % 60_000 + 1)
             }
         }
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("RESETS IN ", style = MaterialTheme.typography.labelLarge, color = Muted)
         Text(
-            formatDuration(remaining),
+            countdown(remaining),
             style = MaterialTheme.typography.labelLarge,
             color = ValorantRed,
             fontWeight = FontWeight.Bold,
         )
     }
-}
-
-internal fun formatDuration(millis: Long): String {
-    val total = (millis / 1000).coerceAtLeast(0)
-    return "%02d:%02d:%02d".format(total / 3600, (total % 3600) / 60, total % 60)
 }
 
 @Composable
@@ -241,22 +236,14 @@ private fun WishlistChip(count: Int, onClick: () -> Unit) {
 @Composable
 private fun WalletRow(wallet: Wallet) {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Balance(VALORANT_POINTS_UUID, wallet.valorantPoints, "VALORANT Points")
-        Balance(RADIANITE_POINTS_UUID, wallet.radianite, "Radianite Points")
-        Balance(KINGDOM_CREDITS_UUID, wallet.kingdomCredits, "Kingdom Credits")
+        Balance(wallet.valorantPoints, Currency.VALORANT_POINTS)
+        Balance(wallet.radianite, Currency.RADIANITE_POINTS)
+        Balance(wallet.kingdomCredits, Currency.KINGDOM_CREDITS)
     }
 }
 
 @Composable
-private fun Balance(currencyUuid: String, amount: Int, currencyName: String) {
-    val formatted = "%,d".format(amount)
-    // Read as "1,250 VALORANT Points" rather than an unlabelled icon and a number.
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "$formatted $currencyName" }) {
-        AsyncImage(model = CurrencyArt.icon(currencyUuid), contentDescription = null, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(formatted, fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-    }
-}
+private fun Balance(amount: Int, currency: Currency) = Amount(amount, currency = currency, fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 13.sp)
 
 /** Section title with a coarse countdown, for offers that run for days. */
 @Composable
@@ -290,7 +277,7 @@ private fun BundleCard(bundle: StoreBundle) {
         ) {
             Text(bundle.name.uppercase(), fontFamily = Display, fontSize = 24.sp)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                bundle.priceVp?.let { Text("%,d VP".format(it), fontWeight = FontWeight.Bold) }
+                bundle.priceVp?.let { Amount(it, fontWeight = FontWeight.Bold) }
                 if (bundle.basePriceVp != null && bundle.priceVp != null && bundle.basePriceVp > bundle.priceVp) {
                     Spacer(Modifier.width(8.dp))
                     Text("%,d".format(bundle.basePriceVp), color = Muted, textDecoration = TextDecoration.LineThrough, fontSize = 12.sp)
@@ -374,8 +361,9 @@ private fun SkinCard(
                     )
                 }
                 shortBy?.let {
-                    Text(
-                        "NEED %,d VP".format(it),
+                    Amount(
+                        it,
+                        prefix = "NEED",
                         fontFamily = Mono,
                         fontSize = 9.sp,
                         color = Muted,
@@ -406,12 +394,11 @@ private fun SkinCard(
                 }
                 Spacer(Modifier.weight(1f))
                 skin.priceVp?.let { price ->
-                    Text(
-                        "%,d VP".format(price),
+                    Amount(
+                        price,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = if (shortBy == null) tierColor else Muted,
-                        maxLines = 1,
                     )
                 }
             }

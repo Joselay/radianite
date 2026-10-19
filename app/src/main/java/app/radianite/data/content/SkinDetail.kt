@@ -64,7 +64,7 @@ fun ApiSkinDetail.toSkinDetail(): SkinDetail {
             SkinVariant(
                 id = chroma.uuid,
                 title = chromaLabel(chroma.displayName, index),
-                subtitle = null,
+                subtitle = chromaUnlock(chroma.displayName, index),
                 imageUrl = chroma.fullRender ?: chroma.displayIcon ?: baseImage,
                 videoUrl = chroma.streamedVideo,
                 swatchUrl = chroma.swatch,
@@ -87,4 +87,11 @@ fun chromaLabel(displayName: String, index: Int): String {
     if (index == 0) return "Default"
     val inParens = Regex("""\(([^)]*)\)""").find(displayName)?.groupValues?.get(1) ?: return displayName.lines().last().trim()
     return inParens.replace(Regex("""^Variant\s*\d+\s*[-:]?\s*"""), "").trim().ifEmpty { inParens.trim() }
+}
+
+/** "Elderflame Vandal Level 4\n(Variant 1 Red)" -> "Unlocks at Level 4"; null when the name doesn't say. */
+fun chromaUnlock(displayName: String, index: Int): String? {
+    if (index == 0) return null
+    val level = Regex("""\bLevel (\d+)\b""").find(displayName)?.groupValues?.get(1) ?: return null
+    return "Unlocks at Level $level"
 }
