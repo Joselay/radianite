@@ -119,6 +119,8 @@ class RiotHttpException(
     val status: Int,
     val errorCode: String?,
     message: String,
+    /** How long Riot asked callers to wait, from a Retry-After header. */
+    val retryAfterSeconds: Long? = null,
 ) : Exception(message) {
     val isAuthError: Boolean
         get() = status == 401 || status == 403 || errorCode == "BAD_CLAIMS" || errorCode == "TOKEN_EXPIRED"

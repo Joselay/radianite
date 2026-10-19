@@ -10,8 +10,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.DeserializationStrategy
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -48,8 +46,13 @@ object ItemTypes {
  * once (shared by every call that hit the same rejection), and reports a session that can't be renewed as
  * [SessionExpiredException], also announced on [expired].
  *
- * The pd and glz endpoints are the ones the game client uses; they are undocumented and not part of
+ * The pd endpoints are the ones the game client uses; they are undocumented and not part of
  * Riot's official developer API. Tests substitute the transport through the [OkHttpClient].
+ *
+ * Read-only by rule: nothing here buys, equips, picks agents, queues or otherwise acts on the account,
+ * nothing reads a match while it's being played (the glz live-game endpoints), and nothing reveals what the
+ * game hides. Those are what Riot treats as unfair advantages, automation or real-time help, and what puts
+ * accounts at risk.
  */
 class RiotPlayerData(
     private val http: OkHttpClient,
@@ -67,6 +70,10 @@ class RiotPlayerData(
 
     @Volatile
     private var session: RiotSession? = null
+
+    /** Until when calls wait out a rate limit rather than ask Riot again. */
+    @Volatile
+    private var coolingDownUntil = 0L
 
     private val noRedirects = http.newBuilder()
         .followRedirects(false)
@@ -149,24 +156,7 @@ class RiotPlayerData(
                 .toString()
         }
 
-    suspend fun names(puuids: List<String>): List<NameServiceEntry> {
-        val body = json.encodeToString(ListSerializer(String.serializer()), puuids).toRequestBody(JSON_MEDIA)
-        return call(ListSerializer(NameServiceEntry.serializer()), body = body, method = "PUT") { pd(it, "name-service/v2/players") }
-    }
-
-    /** The agent select the player is in, or null when they aren't in one. */
-    suspend fun pregame(): PregameMatchResponse? {
-        val pointer = callOrNullIfMissing(LiveMatchPointer.serializer()) { glz(it, "pregame/v1/players/${it.puuid}") } ?: return null
-        return call(PregameMatchResponse.serializer()) { glz(it, "pregame/v1/matches/${pointer.matchId}") }
-    }
-
-    /** The in-progress game the player is in, or null when they aren't in one. */
-    suspend fun coreGame(): CoreGameMatchResponse? {
-        val pointer = callOrNullIfMissing(LiveMatchPointer.serializer()) { glz(it, "core-game/v1/players/${it.puuid}") } ?: return null
-        return call(CoreGameMatchResponse.serializer()) { glz(it, "core-game/v1/matches/${pointer.matchId}") }
-    }
-
-    /** One pd/glz request with a valid session, renewing the tokens once if Riot rejects them. */
+    /** One pd request with a valid session, renewing the tokens once if Riot rejects them. */
     private suspend fun <T> call(
         deserializer: DeserializationStrategy<T>,
         body: RequestBody? = null,
@@ -188,13 +178,6 @@ class RiotPlayerData(
                 throw e
             }
         }
-    }
-
-    /** Riot answers 404 (RESOURCE_NOT_FOUND) when the player has no live match of that kind. */
-    private suspend fun <T> callOrNullIfMissing(deserializer: DeserializationStrategy<T>, url: (RiotSession) -> String): T? = try {
-        call(deserializer, url = url)
-    } catch (e: RiotHttpException) {
-        if (e.status == 404) null else throw e
     }
 
     private suspend fun <T> expiring(block: suspend () -> T): T = try {
@@ -242,13 +225,27 @@ class RiotPlayerData(
         return session
     }
 
-    private suspend fun <T> execute(request: Request, deserializer: DeserializationStrategy<T>): T = http.fetch(json, request, deserializer)
+    /**
+     * Once Riot rate-limits a call, every call fails fast without the network until the wait it asked for
+     * is over: carrying on, e.g. with the live-match poll, would look like a misbehaving client.
+     */
+    private suspend fun <T> execute(request: Request, deserializer: DeserializationStrategy<T>): T {
+        val wait = coolingDownUntil - clock()
+        if (wait > 0) throw RiotHttpException(429, null, "Waiting ${wait / 1000 + 1}s for Riot's rate limit", retryAfterSeconds = wait / 1000 + 1)
+        try {
+            return http.fetch(json, request, deserializer)
+        } catch (e: RiotHttpException) {
+            if (e.status == 429) {
+                val seconds = (e.retryAfterSeconds ?: 0).coerceIn(MIN_COOL_DOWN_SECONDS, MAX_COOL_DOWN_SECONDS)
+                coolingDownUntil = clock() + seconds * 1000
+            }
+            throw e
+        }
+    }
 
     private fun pd(session: RiotSession, path: String) = "https://pd.${session.shard}.a.pvp.net/$path"
 
-    private fun glz(session: RiotSession, path: String) = "https://glz-${session.affinity}-1.${session.shard}.a.pvp.net/$path"
-
-    /** Headers the game client sends on every pd/glz call. */
+    /** Headers the game client sends on every pd call. */
     private fun gameRequest(session: RiotSession, clientVersion: String, url: String, method: String, body: RequestBody?) =
         Request.Builder()
             .url(url)
@@ -264,6 +261,8 @@ class RiotPlayerData(
 
     private companion object {
         const val TOKEN_MARGIN_MILLIS = 2 * 60 * 1000L
+        const val MIN_COOL_DOWN_SECONDS = 60L
+        const val MAX_COOL_DOWN_SECONDS = 15 * 60L
 
         val EMPTY_JSON = "{}".toRequestBody(JSON_MEDIA)
 

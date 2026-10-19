@@ -117,10 +117,33 @@ class RiotPlayerDataTest {
     }
 
     @Test
-    fun `no live match reads as null`() = runTest {
+    fun `after a rate limit, calls wait out Riot's Retry-After without asking again`() = runTest {
         val app = Fixture(tmp.root).apply { signIn(accessToken = "new") }
+        app.servers.on("/store/v1/wallet/") { Reply(429, """{"errorCode":"RATE_LIMITED"}""", retryAfter = 120) }
 
-        assertNull(app.riot.pregame())
-        assertNull(app.riot.coreGame())
+        repeat(3) { assertEquals(429, (runCatching { app.riot.wallet() }.exceptionOrNull() as RiotHttpException).status) }
+        assertEquals("only the first call reaches Riot", 1, app.servers.count("/store/v1/wallet/"))
+        assertTrue("other endpoints wait too", runCatching { app.riot.accountXp() }.exceptionOrNull().let { it is RiotHttpException && it.status == 429 })
+        assertEquals(0, app.servers.count("/account-xp/"))
+
+        app.servers.on("/store/v1/wallet/") { Reply(body = """{"Balances":{}}""") }
+        app.now += 121_000
+        app.riot.wallet()
+        assertEquals(2, app.servers.count("/store/v1/wallet/"))
+    }
+
+    @Test
+    fun `a rate limit without Retry-After still waits a minute`() = runTest {
+        val app = Fixture(tmp.root).apply { signIn(accessToken = "new") }
+        app.servers.on("/store/v1/wallet/") { Reply(429) }
+        runCatching { app.riot.wallet() }
+
+        app.now += 30_000
+        runCatching { app.riot.wallet() }
+        assertEquals(1, app.servers.count("/store/v1/wallet/"))
+
+        app.now += 31_000
+        runCatching { app.riot.wallet() }
+        assertEquals(2, app.servers.count("/store/v1/wallet/"))
     }
 }

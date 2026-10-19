@@ -14,7 +14,7 @@ Domain language for Radianite. Module names in code follow these terms.
 
 **Skin**: a weapon skin as the app shows it, at one of its levels: `StoreSkin`. Riot's store and loadout refer to skin *levels*; the catalog maps a level back to its skin.
 
-**Match**: a finished game, reduced to what the app shows (`MatchRecord`), and seen from one player's point of view (`MatchSummary`). A **live match** is the agent select or game the player is in right now.
+**Match**: a finished game, reduced to what the app shows (`MatchRecord`), and seen from one player's point of view (`MatchSummary`). Only finished matches: the app never reads a match while it's being played.
 
 **Ranked rating change**: how one competitive game moved the player's rank (`RankedRatingChange`). The newest ones are attached to their matches and drawn as the career's **RR trend**.
 
@@ -34,7 +34,7 @@ Domain language for Radianite. Module names in code follow these terms.
 
 ## Modules
 
-**Riot player data** (`RiotPlayerData`): every call to Riot's game endpoints for one signed-in account. Hides the session, client version, hosts, headers, token renewal and expiry. Tests substitute the transport through the `OkHttpClient`.
+**Riot player data** (`RiotPlayerData`): every call to Riot's game endpoints for one signed-in account. Read-only: nothing acts on the account or reveals what the game hides. Hides the session, client version, hosts, headers, token renewal and expiry. Tests substitute the transport through the `OkHttpClient`.
 
 **Riot sign-in** (`RiotSignIn`): turns tokens from Riot's sign-in redirect into a session, for a new sign-in and for every renewal.
 

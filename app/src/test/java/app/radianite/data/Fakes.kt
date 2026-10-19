@@ -17,7 +17,7 @@ import java.io.File
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
-class Reply(val code: Int = 200, val body: String = "{}", val location: String? = null)
+class Reply(val code: Int = 200, val body: String = "{}", val location: String? = null, val retryAfter: Long? = null)
 
 /**
  * Stands in for Riot and valorant-api.com at the OkHttp seam. A request goes to the route with the longest key
@@ -46,6 +46,7 @@ class FakeServers {
             .code(reply.code)
             .message("")
             .apply { if (reply.location != null) header("Location", reply.location) }
+            .apply { if (reply.retryAfter != null) header("Retry-After", reply.retryAfter.toString()) }
             .body(reply.body.toResponseBody())
             .build()
     }).build()

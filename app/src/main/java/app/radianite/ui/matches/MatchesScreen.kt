@@ -28,7 +28,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,12 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.repeatOnLifecycle
-import app.radianite.data.match.LiveMatch
-import app.radianite.data.match.LivePlayer
 import app.radianite.data.match.MatchSummary
 import app.radianite.ui.common.AccountsButton
 import app.radianite.ui.common.AgentIcon
@@ -53,36 +47,22 @@ import app.radianite.ui.common.HudChip
 import app.radianite.ui.common.LocalGameContent
 import app.radianite.ui.common.MessageBanner
 import app.radianite.ui.common.RankIcon
-import app.radianite.ui.common.SectionHeader
 import app.radianite.ui.common.Skeleton
 import app.radianite.ui.common.WinGreen
 import app.radianite.ui.common.color
 import app.radianite.ui.common.relativeTime
 import app.radianite.ui.common.signed
 import app.radianite.ui.theme.Display
-import app.radianite.ui.theme.Ink
 import app.radianite.ui.theme.InkRaised
 import app.radianite.ui.theme.Mono
 import app.radianite.ui.theme.Muted
 import app.radianite.ui.theme.ValorantRed
 import coil3.compose.AsyncImage
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MatchesScreen(riotId: String, viewModel: MatchesViewModel, onOpenAccounts: () -> Unit, onOpenMatch: (MatchSummary) -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-
-    // Poll for agent select / live games only while this tab is visible and the app is in front.
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(lifecycle) {
-        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            while (true) {
-                delay(LIVE_POLL_MILLIS)
-                viewModel.refreshLive()
-            }
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -110,12 +90,11 @@ fun MatchesScreen(riotId: String, viewModel: MatchesViewModel, onOpenAccounts: (
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                // One always-present top item, so a live card that appears while you're at the top isn't
+                // One always-present top item, so a banner that appears while you're at the top isn't
                 // inserted off-screen above the list's scroll anchor.
                 item(key = "header") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         state.message?.let { MessageBanner(it) }
-                        state.live?.let { LiveMatchCard(it) }
                         QueueChips(state.filter, onSelect = viewModel::select)
                     }
                 }
@@ -218,70 +197,4 @@ private fun MatchRow(match: MatchSummary, onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun LiveMatchCard(live: LiveMatch) {
-    val content = LocalGameContent.current
-    val map = content?.map(live.mapId)
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Ink),
-    ) {
-        AsyncImage(
-            model = map?.splash,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            alpha = 0.4f,
-            modifier = Modifier.matchParentSize(),
-        )
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(ValorantRed))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    if (live.phase == LiveMatch.Phase.AGENT_SELECT) "LIVE · AGENT SELECT" else "LIVE · IN PROGRESS",
-                    fontFamily = Mono,
-                    fontSize = 11.sp,
-                    letterSpacing = 1.5.sp,
-                    color = ValorantRed,
-                )
-            }
-            Text(map?.name ?: "Loading map", fontFamily = Display, fontSize = 28.sp)
-            live.queueId?.let { Text(content?.queueName(it) ?: it, color = Muted, style = MaterialTheme.typography.labelMedium) }
-            SectionHeader("YOUR TEAM")
-            live.allies.forEach { LivePlayerRow(it) }
-            if (live.enemies.isNotEmpty()) {
-                SectionHeader("ENEMY TEAM")
-                live.enemies.forEach { LivePlayerRow(it) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LivePlayerRow(player: LivePlayer) {
-    val agent = LocalGameContent.current?.agent(player.agentId)
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 3.dp)) {
-        AgentIcon(player.agentId, 32.dp)
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                player.name ?: agent?.name ?: "Picking…",
-                fontWeight = if (player.isSelf) FontWeight.Bold else FontWeight.Normal,
-                color = if (player.isSelf) MaterialTheme.colorScheme.primary else Color.Unspecified,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val detail = listOfNotNull(
-                agent?.name?.takeIf { player.name != null },
-                if (!player.locked && player.agentId != null) "hovering" else null,
-            ).joinToString(" · ")
-            if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.labelSmall, color = Muted)
-        }
-        player.accountLevel?.let { Text("LV $it", fontFamily = Mono, fontSize = 11.sp, color = Muted) }
-    }
-}
-
-private const val LIVE_POLL_MILLIS = 20_000L
 private const val PLACEHOLDER_ROWS = 6

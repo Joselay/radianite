@@ -76,6 +76,7 @@ internal suspend fun <T> OkHttpClient.fetch(json: Json, request: Request, deseri
                 status = response.code,
                 errorCode = error?.errorCode,
                 message = error?.message ?: "HTTP ${response.code} from ${request.url.host}",
+                retryAfterSeconds = response.header("Retry-After")?.toLongOrNull(),
             )
         }
         json.decodeFromString(deserializer, body)

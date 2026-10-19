@@ -2,15 +2,11 @@ package app.radianite.ui.matches
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import app.radianite.data.match.LiveMatch
 import app.radianite.data.match.MatchHistory
 import app.radianite.data.match.MatchPage
 import app.radianite.data.match.MatchSummary
-import app.radianite.data.optional
 import app.radianite.ui.common.loadReporting
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +28,6 @@ enum class QueueFilter(val label: String, val queueId: String?) {
 data class MatchesUiState(
     val filter: QueueFilter = QueueFilter.ALL,
     val matches: List<MatchSummary> = emptyList(),
-    val live: LiveMatch? = null,
     val refreshing: Boolean = true,
     val loadingMore: Boolean = false,
     val endReached: Boolean = false,
@@ -64,11 +59,8 @@ class MatchesViewModel(private val history: MatchHistory) : ViewModel() {
             _state.update { it.copy(refreshing = true, loadingMore = false, message = null) }
             val queue = _state.value.filter.queueId
             load {
-                coroutineScope {
-                    val live = async { optional("Live match") { history.liveMatch() } }
-                    val page = history.firstPage(queue)
-                    _state.update { it.withPage(page).copy(live = live.await(), refreshing = false) }
-                }
+                val page = history.firstPage(queue)
+                _state.update { it.withPage(page).copy(refreshing = false) }
             }
         }
     }
@@ -81,17 +73,6 @@ class MatchesViewModel(private val history: MatchHistory) : ViewModel() {
             load {
                 val page = history.nextPage(s.filter.queueId)
                 _state.update { it.withPage(page).copy(loadingMore = false) }
-            }
-        }
-    }
-
-    /** Polled while the tab is on screen, so agent select and live games show up without a pull. */
-    fun refreshLive() {
-        if (job?.isActive == true) return
-        viewModelScope.launch {
-            loadReporting({ /* The next poll tries again. */ }) {
-                val live = optional("Live match") { history.liveMatch() }
-                _state.update { it.copy(live = live) }
             }
         }
     }

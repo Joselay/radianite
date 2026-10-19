@@ -3,9 +3,6 @@ package app.radianite.data.match
 import app.radianite.data.LocalStore
 import app.radianite.data.Slots
 import app.radianite.data.optional
-import app.radianite.data.riot.CoreGameMatchResponse
-import app.radianite.data.riot.LivePlayerIdentity
-import app.radianite.data.riot.PregameMatchResponse
 import app.radianite.data.riot.RiotPlayerData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -17,26 +14,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
-
-/** A match the player is in right now. Names are only shown for players who aren't in incognito mode. */
-data class LiveMatch(
-    val phase: Phase,
-    val mapId: String,
-    val queueId: String?,
-    val allies: List<LivePlayer>,
-    val enemies: List<LivePlayer>,
-) {
-    enum class Phase { AGENT_SELECT, IN_PROGRESS }
-}
-
-data class LivePlayer(
-    val puuid: String,
-    val isSelf: Boolean,
-    val name: String?,
-    val agentId: String?,
-    val locked: Boolean,
-    val accountLevel: Int?,
-)
 
 /** Every match loaded so far, newest first; [endReached] once Riot has no older ones. */
 data class MatchPage(val matches: List<MatchSummary>, val endReached: Boolean)
@@ -105,13 +82,6 @@ class MatchHistory(
         return changes
     }
 
-    /** The agent select or game the player is in, or null when they aren't in one. */
-    suspend fun liveMatch(): LiveMatch? {
-        val self = riot.puuid()
-        riot.pregame()?.let { return it.toLive(self) }
-        return riot.coreGame()?.toLive(self)
-    }
-
     private suspend fun loadFirstPage(puuid: String, queue: String?): MatchPage = coroutineScope {
         val rr = async { optional("Ranked rating changes") { rankedRatingChanges(maxAgeMillis = 0) }.orEmpty() }
         val entries = riot.matchHistory(0, PAGE_SIZE, queue).history
@@ -149,63 +119,6 @@ class MatchHistory(
         }
         return record
     }
-
-    private suspend fun PregameMatchResponse.toLive(self: String): LiveMatch {
-        val players = allyTeam?.players.orEmpty()
-        val names = visibleNames(self, players.map { it.subject to it.identity })
-        return LiveMatch(
-            phase = LiveMatch.Phase.AGENT_SELECT,
-            mapId = mapId,
-            queueId = queueId,
-            allies = players.map {
-                LivePlayer(
-                    puuid = it.subject,
-                    isSelf = it.subject == self,
-                    name = names[it.subject],
-                    agentId = it.characterId.ifBlank { null }?.lowercase(),
-                    locked = it.selectionState == "locked",
-                    accountLevel = it.identity?.visibleLevel(),
-                )
-            },
-            // Riot doesn't reveal the enemy team until the game loads.
-            enemies = emptyList(),
-        )
-    }
-
-    private suspend fun CoreGameMatchResponse.toLive(self: String): LiveMatch {
-        val playing = players.filterNot { it.isCoach }
-        val myTeam = playing.find { it.subject == self }?.teamId
-        val names = visibleNames(self, playing.map { it.subject to it.identity })
-        val live = playing.map {
-            LivePlayer(
-                puuid = it.subject,
-                isSelf = it.subject == self,
-                name = names[it.subject],
-                agentId = it.characterId.ifBlank { null }?.lowercase(),
-                locked = true,
-                accountLevel = it.identity?.visibleLevel(),
-            )
-        }
-        val teamOf = playing.associate { it.subject to it.teamId }
-        return LiveMatch(
-            phase = LiveMatch.Phase.IN_PROGRESS,
-            mapId = mapId,
-            queueId = null,
-            allies = live.filter { teamOf[it.puuid] == myTeam },
-            enemies = live.filter { teamOf[it.puuid] != myTeam },
-        )
-    }
-
-    /** Names for players who chose to show them; incognito players stay hidden, as they are in game. */
-    private suspend fun visibleNames(self: String, players: List<Pair<String, LivePlayerIdentity?>>): Map<String, String> {
-        val visible = players.filter { (puuid, identity) -> puuid == self || identity?.incognito == false }.map { it.first }
-        if (visible.isEmpty()) return emptyMap()
-        return optional("Player names") { riot.names(visible) }.orEmpty()
-            .filter { it.gameName.isNotBlank() }
-            .associate { it.subject to "${it.gameName}#${it.tagLine}" }
-    }
-
-    private fun LivePlayerIdentity.visibleLevel(): Int? = accountLevel.takeUnless { hideAccountLevel || it <= 0 }
 
     private class RrCache(val puuid: String, val fetchedAtMillis: Long, val changes: List<RankedRatingChange>)
 
