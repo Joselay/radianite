@@ -43,6 +43,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import app.radianite.R
 import app.radianite.data.content.GameContent
 import app.radianite.data.match.Outcome
@@ -134,12 +137,20 @@ fun HudChip(label: String, selected: Boolean, onClick: () -> Unit) {
     )
 }
 
-/** The current time, updated every [intervalMillis] while on screen, for countdowns that should keep moving. */
+/**
+ * The current time, updated every [intervalMillis] for countdowns that should keep moving. Ticks only while
+ * the app is in front, so it never wakes the phone in the background, and catches up on return.
+ */
 @Composable
-fun rememberNow(intervalMillis: Long): State<Long> = produceState(System.currentTimeMillis(), intervalMillis) {
-    while (true) {
-        delay(intervalMillis - System.currentTimeMillis() % intervalMillis)
-        value = System.currentTimeMillis()
+fun rememberNow(intervalMillis: Long): State<Long> {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    return produceState(System.currentTimeMillis(), intervalMillis, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                value = System.currentTimeMillis()
+                delay(intervalMillis - System.currentTimeMillis() % intervalMillis)
+            }
+        }
     }
 }
 

@@ -51,7 +51,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import app.radianite.R
 import app.radianite.data.content.CurrencyArt
 import app.radianite.data.store.KINGDOM_CREDITS_UUID
@@ -178,19 +181,25 @@ fun StoreScreen(
 private fun LazyGridScope.fullWidth(key: String, content: @Composable () -> Unit) =
     item(key = key, span = { GridItemSpan(maxLineSpan) }) { content() }
 
-/** Ticks once a second in its own scope, so the cards below never recompose for the timer. */
+/**
+ * Ticks once a second in its own scope, so the cards below never recompose for the timer, and only while
+ * the app is in front: a rollover that happened in the background refreshes the store on return.
+ */
 @Composable
 private fun ResetCountdown(expiresAtMillis: Long, onExpired: () -> Unit) {
-    val remaining by produceState(expiresAtMillis - System.currentTimeMillis(), expiresAtMillis) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val remaining by produceState(expiresAtMillis - System.currentTimeMillis(), expiresAtMillis, lifecycle) {
         val countedDown = value > 0
-        while (true) {
-            value = expiresAtMillis - System.currentTimeMillis()
-            if (value <= 0) {
-                // Only auto-refresh on a real rollover, never for a store that arrived already expired.
-                if (countedDown) onExpired()
-                break
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                value = expiresAtMillis - System.currentTimeMillis()
+                if (value <= 0) {
+                    // Only auto-refresh on a real rollover, never for a store that arrived already expired.
+                    if (countedDown) onExpired()
+                    break
+                }
+                delay(1_000 - System.currentTimeMillis() % 1_000)
             }
-            delay(1_000)
         }
     }
     Row(verticalAlignment = Alignment.CenterVertically) {

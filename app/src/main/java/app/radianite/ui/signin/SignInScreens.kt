@@ -70,7 +70,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -111,6 +110,7 @@ import app.radianite.data.store.FeaturedBundle
 import app.radianite.data.store.millisUntilStoreReset
 import app.radianite.ui.VersionLabel
 import app.radianite.ui.common.rememberMotionEnabled
+import app.radianite.ui.common.rememberNow
 import app.radianite.ui.theme.Bone
 import app.radianite.ui.theme.Display
 import app.radianite.ui.theme.Ink
@@ -119,7 +119,6 @@ import app.radianite.ui.theme.Mono
 import app.radianite.ui.theme.Muted
 import app.radianite.ui.theme.ValorantRed
 import coil3.compose.AsyncImage
-import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -367,13 +366,8 @@ private fun ProgressBars(count: Int, active: Int, activeFill: () -> Float) {
 /** Time until the daily offers rotate, which happens at 00:00 UTC. */
 @Composable
 private fun ResetChip(motion: Boolean) {
-    val remaining by produceState(millisUntilStoreReset(System.currentTimeMillis())) {
-        while (true) {
-            delay(1_000)
-            value = millisUntilStoreReset(System.currentTimeMillis())
-        }
-    }
-    val s = remaining / 1000
+    val now by rememberNow(1_000)
+    val s = millisUntilStoreReset(now) / 1000
     Row(
         Modifier
             .border(1.dp, Bone.copy(alpha = 0.15f))

@@ -33,27 +33,42 @@ import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
 
 /**
- * Fetches every signed-in account's store in the background a few minutes after each rotation, so the
- * home-screen widget shows today's offers and a wishlisted skin in any of them is announced.
+ * Fetches every signed-in account's store in the background once a day, a few minutes after it rotates, so
+ * the home-screen widget shows today's offers and a wishlisted skin in any of them is announced. Once is
+ * enough: daily offers only change at the rotation, and a Night Market runs for days.
  */
 object StoreSync {
-    private const val WORK_NAME = "store-sync"
+    private const val WORK_NAME = "store-sync-daily"
+
+    // Builds before the daily schedule ran every six hours under this name.
+    private const val OLD_WORK_NAME = "store-sync"
     private const val CHANNEL_ID = "store_alerts"
-    private const val PERIOD_HOURS = 6L
     private const val AFTER_RESET_MILLIS = 5 * 60 * 1000L
 
-    /** Runs every six hours, lined up a few minutes after 00:00, 06:00, 12:00 and 18:00 UTC. Keeps an existing schedule. */
+    /**
+     * Runs daily a few minutes after 00:00 UTC, when the store rotates, with a network and enough battery.
+     * Keeps an existing schedule, so opening the app doesn't move it.
+     */
     fun schedule(context: Context) {
-        val period = TimeUnit.HOURS.toMillis(PERIOD_HOURS)
-        val request = PeriodicWorkRequestBuilder<StoreSyncWorker>(PERIOD_HOURS, TimeUnit.HOURS)
-            .setInitialDelay(millisUntilStoreReset(System.currentTimeMillis()) % period + AFTER_RESET_MILLIS, TimeUnit.MILLISECONDS)
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+        val work = WorkManager.getInstance(context)
+        work.cancelUniqueWork(OLD_WORK_NAME)
+        val request = PeriodicWorkRequestBuilder<StoreSyncWorker>(1, TimeUnit.DAYS)
+            .setInitialDelay(millisUntilStoreReset(System.currentTimeMillis()) + AFTER_RESET_MILLIS, TimeUnit.MILLISECONDS)
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .setRequiresBatteryNotLow(true)
+                    .build(),
+            )
             .build()
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+        work.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
     }
 
     fun cancel(context: Context) {
-        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+        WorkManager.getInstance(context).run {
+            cancelUniqueWork(WORK_NAME)
+            cancelUniqueWork(OLD_WORK_NAME)
+        }
     }
 
     fun createChannel(context: Context) {

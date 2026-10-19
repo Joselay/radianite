@@ -38,7 +38,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.IntOffset
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.radianite.AppContainer
 import app.radianite.R
@@ -113,9 +116,13 @@ fun HomeScreen(
     onSignOut: () -> Unit,
 ) {
     val content by container.content.game.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) {
-        // Screens show placeholders until names and art arrive; keep trying while offline.
-        while (orNull { container.content.gameContent() } == null) delay(CONTENT_RETRY_MILLIS)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        // Screens show placeholders until names and art arrive; keep trying while offline, but only while
+        // the app is in front, so being offline in the background costs nothing.
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (orNull { container.content.gameContent() } == null) delay(CONTENT_RETRY_MILLIS)
+        }
     }
     var showAccounts by rememberSaveable { mutableStateOf(false) }
     CompositionLocalProvider(LocalGameContent provides content) {
