@@ -74,6 +74,7 @@ class Content(
     }
 
     private val skinDetails = ConcurrentHashMap<String, SkinDetail>()
+    private val cosmetics = ConcurrentHashMap<String, Cosmetic>()
 
     @Volatile
     private var version: Pair<String, Long>? = null
@@ -104,6 +105,15 @@ class Content(
     /** One skin's levels and chromas, with their preview videos. */
     suspend fun skinDetail(skinUuid: String): SkinDetail =
         skinDetails[skinUuid] ?: api.get("weapons/skins/$skinUuid", ApiSkinDetail.serializer()).toSkinDetail().also { skinDetails[skinUuid] = it }
+
+    /** A buddy, spray, player card or title's name and art. */
+    suspend fun cosmetic(kind: CosmeticKind, uuid: String): Cosmetic {
+        val path = "${kind.path}/${uuid.lowercase()}"
+        return cosmetics[path] ?: api.get(path, ApiCosmetic.serializer()).toCosmetic(kind).also { cosmetics[path] = it }
+    }
+
+    /** A bundle's wide art and blurb, for its own page. */
+    suspend fun bundleInfo(uuid: String): BundleInfo = api.get("bundles/${uuid.lowercase()}", ApiBundleDetail.serializer()).toBundleInfo()
 
     private companion object {
         const val VERSION_TTL_MILLIS = 15 * 60 * 1000L

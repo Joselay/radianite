@@ -29,6 +29,22 @@ data class StoreBundle(
     /** Price before the bundle discount; equal to [priceVp] when there is none. */
     val basePriceVp: Int?,
     val expiresAtMillis: Long,
+    /** The bundle's UUID on valorant-api.com; null for stores cached by older builds, as are empty [items]. */
+    val uuid: String? = null,
+    val items: List<BundleItem> = emptyList(),
+)
+
+/** One thing in a bundle as Riot lists it; [BundleContents] names it. Prices are null when not in VP. */
+@Serializable
+data class BundleItem(
+    /** One of the [app.radianite.data.riot.ItemTypes] constants. */
+    val itemTypeId: String,
+    val itemId: String,
+    val amount: Int,
+    /** What it costs in the bundle; 0 for items thrown in. */
+    val priceVp: Int?,
+    /** What it costs on its own. */
+    val basePriceVp: Int?,
 )
 
 /** [skin] carries the discounted price. */
@@ -77,6 +93,17 @@ fun StorefrontResponse.toDailyStore(puuid: String, catalog: Catalog, nowMillis: 
                 priceVp = price,
                 basePriceVp = offer.totalBaseCost?.get(VALORANT_POINTS_UUID) ?: price,
                 expiresAtMillis = nowMillis + offer.remainingSeconds * 1000,
+                uuid = offer.dataAssetId.lowercase(),
+                items = offer.items.orEmpty().map { entry ->
+                    val vp = entry.currencyId == null || entry.currencyId.equals(VALORANT_POINTS_UUID, ignoreCase = true)
+                    BundleItem(
+                        itemTypeId = entry.item.itemTypeId.lowercase(),
+                        itemId = entry.item.itemId.lowercase(),
+                        amount = entry.item.amount,
+                        priceVp = entry.discountedPrice.takeIf { vp },
+                        basePriceVp = entry.basePrice.takeIf { vp },
+                    )
+                },
             )
         },
         nightMarket = bonusStore?.offers.orEmpty().map { bonus ->
@@ -90,11 +117,13 @@ fun StorefrontResponse.toDailyStore(puuid: String, catalog: Catalog, nowMillis: 
     )
 }
 
-private fun StoreOffer.toStoreSkin(catalog: Catalog, priceVp: Int?): StoreSkin {
-    val levelUuid = rewards.firstOrNull()?.itemId ?: offerId
-    return catalog.storeSkin(levelUuid, priceVp)
+private fun StoreOffer.toStoreSkin(catalog: Catalog, priceVp: Int?): StoreSkin =
+    catalog.storeSkinOrUnknown(rewards.firstOrNull()?.itemId ?: offerId, priceVp)
+
+/** As [storeSkin], but a skin the catalog doesn't know yet still shows, unnamed. */
+fun Catalog.storeSkinOrUnknown(levelUuid: String, priceVp: Int?): StoreSkin =
+    storeSkin(levelUuid, priceVp)
         ?: StoreSkin(levelUuid.lowercase(), name = "Unknown skin", iconUrl = null, priceVp = priceVp, tierName = null, tierColor = null, tierIconUrl = null)
-}
 
 /** A skin level as the app shows it, or null when the catalog doesn't know it. [priceVp] is null outside the store. */
 fun Catalog.storeSkin(levelUuid: String, priceVp: Int? = null): StoreSkin? {

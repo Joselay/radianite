@@ -88,6 +88,24 @@ data class FeaturedBundleOffer(
     @SerialName("TotalBaseCost") val totalBaseCost: Map<String, Int>? = null,
     @SerialName("TotalDiscountedCost") val totalDiscountedCost: Map<String, Int>? = null,
     @SerialName("DurationRemainingInSeconds") val remainingSeconds: Long = 0,
+    @SerialName("Items") val items: List<BundleOfferItem>? = null,
+)
+
+/** One thing in a bundle, with its price on its own ([basePrice]) and in the bundle ([discountedPrice]). */
+@Serializable
+data class BundleOfferItem(
+    @SerialName("Item") val item: BundleItemRef,
+    @SerialName("BasePrice") val basePrice: Int? = null,
+    @SerialName("DiscountedPrice") val discountedPrice: Int? = null,
+    @SerialName("CurrencyID") val currencyId: String? = null,
+)
+
+/** [itemTypeId] is one of the [ItemTypes] constants. */
+@Serializable
+data class BundleItemRef(
+    @SerialName("ItemTypeID") val itemTypeId: String,
+    @SerialName("ItemID") val itemId: String,
+    @SerialName("Amount") val amount: Int = 1,
 )
 
 @Serializable

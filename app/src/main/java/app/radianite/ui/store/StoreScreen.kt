@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -89,6 +90,7 @@ fun StoreScreen(
     wishlisted: Set<String>,
     onOpenAccounts: () -> Unit,
     onOpenSkin: (StoreSkin) -> Unit,
+    onOpenBundle: (StoreBundle) -> Unit,
     onOpenWishlist: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -159,7 +161,7 @@ fun StoreScreen(
                     }
                     if (store.bundles.isNotEmpty()) {
                         fullWidth("bundles-header") { SectionHeader("FEATURED BUNDLES") }
-                        store.bundles.forEach { bundle -> fullWidth("bundle-" + bundle.name + bundle.expiresAtMillis) { BundleCard(bundle) } }
+                        store.bundles.forEach { bundle -> fullWidth("bundle-" + bundle.name + bundle.expiresAtMillis) { BundleCard(bundle, onClick = { onOpenBundle(bundle) }) } }
                     }
                 } else if (state.refreshing) {
                     items(DAILY_OFFERS, key = { "skeleton-$it" }) { Skeleton(Modifier.fillMaxWidth().height(skinCardHeight())) }
@@ -258,18 +260,36 @@ private fun TimedHeader(title: String, endsAtMillis: Long) {
     }
 }
 
+/** Opens the bundle's contents. */
 @Composable
-private fun BundleCard(bundle: StoreBundle) {
+private fun BundleCard(bundle: StoreBundle, onClick: () -> Unit) {
     val now by rememberNow(60_000)
     Box(
         Modifier
             .fillMaxWidth()
             .height(180.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(InkRaised),
+            .background(InkRaised)
+            .clickable(role = Role.Button, onClickLabel = "See what's in it", onClick = onClick),
     ) {
         AsyncImage(model = bundle.artUrl, contentDescription = bundle.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Ink.copy(alpha = 0.9f)))))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(10.dp)
+                .background(Ink.copy(alpha = 0.75f), RoundedCornerShape(50))
+                .padding(start = 10.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+        ) {
+            Text(
+                if (bundle.items.isEmpty()) "DETAILS" else plural(bundle.items.size, "ITEM", "ITEMS"),
+                fontFamily = Mono,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Icon(painterResource(R.drawable.ic_arrow_forward), contentDescription = null, modifier = Modifier.size(14.dp))
+        }
         Column(
             Modifier
                 .align(Alignment.BottomStart)

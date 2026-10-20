@@ -47,9 +47,12 @@ import app.radianite.AppContainer
 import app.radianite.R
 import app.radianite.data.account.SavedAccount
 import app.radianite.data.match.MatchSummary
+import app.radianite.data.store.StoreBundle
 import app.radianite.data.store.StoreSkin
 import app.radianite.ui.AppUiState
 import app.radianite.ui.account.AccountsSheet
+import app.radianite.ui.bundle.BundleDetailScreen
+import app.radianite.ui.bundle.BundleDetailViewModel
 import app.radianite.ui.career.CareerScreen
 import app.radianite.ui.career.CareerViewModel
 import app.radianite.ui.career.LeaderboardScreen
@@ -92,6 +95,10 @@ private sealed interface Overlay {
 
     data class Match(val matchId: String) : Overlay {
         override val key get() = "match-$matchId"
+    }
+
+    data class Bundle(val bundle: StoreBundle) : Overlay {
+        override val key get() = "bundle-${bundle.uuid ?: bundle.name}"
     }
 
     data object Leaderboard : Overlay {
@@ -205,6 +212,7 @@ private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, on
                             wishlisted = remember(wishlist) { wishlist.mapNotNull { it.skinUuid }.toSet() },
                             onOpenAccounts = onOpenAccounts,
                             onOpenSkin = { open(Overlay.Skin(it)) },
+                            onOpenBundle = { open(Overlay.Bundle(it)) },
                             onOpenWishlist = { open(Overlay.Wishlist) },
                         )
                         Tab.MATCHES -> MatchesScreen(
@@ -261,6 +269,13 @@ private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, on
                             MatchLookup.Missing -> LaunchedEffect(top) { back() }
                         }
                     }
+                    is Overlay.Bundle -> BundleDetailScreen(
+                        bundle = top.bundle,
+                        viewModel = viewModel(key = top.key) { BundleDetailViewModel(container.content, top.bundle) },
+                        wishlisted = remember(wishlist) { wishlist.mapNotNull { it.skinUuid }.toSet() },
+                        onOpenSkin = { if (it.skinUuid != null) open(Overlay.Skin(it)) },
+                        onBack = ::back,
+                    )
                     Overlay.Leaderboard -> LeaderboardScreen(
                         viewModel = viewModel(key = "leaderboard-$account") { LeaderboardViewModel(data.players) },
                         onBack = ::back,

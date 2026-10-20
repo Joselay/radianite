@@ -8,7 +8,7 @@ Domain language for Radianite. Module names in code follow these terms.
 
 **Night Market**: a periodic set of discounted skin offers, shown with the Daily Store while it runs. `NightMarketOffer`.
 
-**Featured bundle**: a bundle on sale in the store. The welcome screen shows the ones the last store fetch saw, kept across sign-outs. `StoreBundle` (in the store), `FeaturedBundle` (welcome screen).
+**Featured bundle**: a bundle on sale in the store. The welcome screen shows the ones the last store fetch saw, kept across sign-outs. `StoreBundle` (in the store), `FeaturedBundle` (welcome screen). Its **contents** are its skins, with their variants, and the buddies, sprays, player cards and titles that come with them, each with its price in the bundle and on its own: `BundleContents`.
 
 **Wallet**: the account's VP, Radianite Points and Kingdom Credits balances.
 

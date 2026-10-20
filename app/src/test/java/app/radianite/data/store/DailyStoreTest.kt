@@ -117,6 +117,35 @@ class DailyStoreTest {
     }
 
     @Test
+    fun `keeps what's in each featured bundle, with VP prices only`() {
+        val body = """
+            {"FeaturedBundle": {"Bundles": [
+              {"DataAssetID": "BUNDLE-1", "DurationRemainingInSeconds": 60,
+               "Items": [
+                 {"Item": {"ItemTypeID": "E7C63390-EDA7-46E0-BB7A-A6ABDACD2433", "ItemID": "AAAA-1", "Amount": 1},
+                  "BasePrice": 1775, "CurrencyID": "$VALORANT_POINTS_UUID", "DiscountPercent": 0.2, "DiscountedPrice": 1420},
+                 {"Item": {"ItemTypeID": "dd3bf334-87f3-40bd-b043-682a57a8dc3a", "ItemID": "buddy-1", "Amount": 1},
+                  "BasePrice": 475, "CurrencyID": "$VALORANT_POINTS_UUID", "DiscountedPrice": 0, "IsPromoItem": true},
+                 {"Item": {"ItemTypeID": "d5f120f8-ff8c-4aac-92ea-f2b5acbe9475", "ItemID": "spray-1", "Amount": 2},
+                  "BasePrice": 10, "CurrencyID": "$RADIANITE_POINTS_UUID", "DiscountedPrice": 10}
+               ]}
+            ]}}
+        """.trimIndent()
+
+        val bundle = json.decodeFromString<StorefrontResponse>(body).toDailyStore("p", catalog, nowMillis = 0).bundles.single()
+
+        assertEquals("bundle-1", bundle.uuid)
+        assertEquals(
+            listOf(
+                BundleItem("e7c63390-eda7-46e0-bb7a-a6abdacd2433", "aaaa-1", amount = 1, priceVp = 1420, basePriceVp = 1775),
+                BundleItem("dd3bf334-87f3-40bd-b043-682a57a8dc3a", "buddy-1", amount = 1, priceVp = 0, basePriceVp = 475),
+                BundleItem("d5f120f8-ff8c-4aac-92ea-f2b5acbe9475", "spray-1", amount = 2, priceVp = null, basePriceVp = null),
+            ),
+            bundle.items,
+        )
+    }
+
+    @Test
     fun `no night market when the bonus store is absent`() {
         val store = StorefrontResponse(null).toDailyStore("p", catalog, nowMillis = 5)
         assertEquals(emptyList<NightMarketOffer>(), store.nightMarket)
