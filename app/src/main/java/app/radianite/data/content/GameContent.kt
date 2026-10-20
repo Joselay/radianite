@@ -24,6 +24,12 @@ data class GameContent(
     fun act(uuid: String?): ActInfo? = uuid?.let { id -> acts.find { it.uuid == id.lowercase() } }
     fun queueName(queueId: String): String = queues[queueId] ?: if (queueId.isEmpty()) "Custom" else queueId.replaceFirstChar { it.uppercase() }
 
+    /** The UUID of the agent the game calls [name], as the team comps guide names agents. */
+    fun agentIdNamed(name: String): String? = agents.entries.find { it.value.name.equals(name, ignoreCase = true) }?.key
+
+    /** The path of the map the game calls [name], which is how matches refer to it. */
+    fun mapPathNamed(name: String): String? = maps.entries.find { it.value.name.equals(name, ignoreCase = true) }?.key
+
     /** The act running at [nowMillis], if valorant-api.com knows about it yet. */
     fun currentAct(nowMillis: Long): ActInfo? = acts.find { nowMillis in it.startMillis until it.endMillis }
 }

@@ -26,6 +26,7 @@ import app.radianite.data.LocalStore
 import app.radianite.data.account.Account
 import app.radianite.data.account.AccountState
 import app.radianite.data.account.SignInCookies
+import app.radianite.data.comps.TeamComps
 import app.radianite.data.content.Content
 import app.radianite.data.match.MatchHistory
 import app.radianite.data.player.PlayerRepository
@@ -119,6 +120,11 @@ class AppContainer(context: Context) {
     }
 
     val wishlist: Wishlist by lazy { Wishlist(device) }
+
+    /** The best comp on each map in Radiant ranked games; ships with the app and updates from its GitHub repository. */
+    val teamComps: TeamComps by lazy {
+        TeamComps(http, json, device, bundled = { appContext.assets.open("team_comps.json").bufferedReader().use { it.readText() } })
+    }
 
     /** New versions from the app's GitHub releases; null in debug builds, which are a separate app. */
     val updates: AppUpdates? by lazy {

@@ -1,6 +1,7 @@
 package app.radianite.data
 
 import app.radianite.data.account.AccountIndex
+import app.radianite.data.comps.CompGuide
 import app.radianite.data.content.Catalog
 import app.radianite.data.content.GameContent
 import app.radianite.data.match.MatchRecord
@@ -52,6 +53,9 @@ object Slots {
     /** App updates already put off or notified about. */
     val updateMarks = Slot("update_marks.json", UpdateMarks.serializer(), Lifetime.DEVICE)
 
+    /** The newest team comps guide downloaded, when it's newer than the one the app shipped with. */
+    val teamComps = Slot("team_comps.json", CompGuide.serializer(), Lifetime.DEVICE)
+
     // Kept across sign-outs for the signed-out welcome screen.
     val featuredBundles = Slot("featured_bundles.json", ListSerializer(FeaturedBundle.serializer()), Lifetime.DEVICE)
 
@@ -62,7 +66,7 @@ object Slots {
     /** One compact file per match; matches never change once played. */
     val matches = Shelf("matches", MatchRecord.serializer(), Lifetime.ACCOUNT, capacity = 200)
 
-    internal val all: List<Slot<*>> = listOf(session, cookies, dailyStore, wallet, accounts, wishlist, storeAlerts, updateMarks, featuredBundles, skinCatalog, gameContent)
+    internal val all: List<Slot<*>> = listOf(session, cookies, dailyStore, wallet, accounts, wishlist, storeAlerts, updateMarks, teamComps, featuredBundles, skinCatalog, gameContent)
     internal val shelves: List<Shelf<*>> = listOf(matches)
 }
 
@@ -75,6 +79,12 @@ class LocalStore(private val dir: File, private val json: Json) {
     suspend fun delete(slot: Slot<*>) = withContext(Dispatchers.IO) { File(dir, slot.fileName).delete() }
 
     suspend fun <T> read(shelf: Shelf<T>, key: String): T? = read(shelfFile(shelf, key), shelf.serializer)
+
+    /** Everything on [shelf], in no particular order; unreadable files are left out. */
+    suspend fun <T> readAll(shelf: Shelf<T>): List<T> {
+        val files = withContext(Dispatchers.IO) { File(dir, shelf.dirName).listFiles { f -> f.name.endsWith(".json") }.orEmpty() }
+        return files.mapNotNull { read(it, shelf.serializer) }
+    }
 
     suspend fun <T> write(shelf: Shelf<T>, key: String, value: T) {
         write(shelfFile(shelf, key), shelf.serializer, value)

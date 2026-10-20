@@ -1,0 +1,21 @@
+{
+  "updated": "2026-10-20",
+  "rankFilter": "Radiant",
+  "sourceName": "vstats.gg",
+  "sourceUrl": "https://www.vstats.gg",
+  "maps": [
+    {"map": "Abyss", "inPool": true, "period": "Act V, Aug–Oct 2026", "thisAct": false, "best": {"agents": ["Clove", "Jett", "Sova", "Vyse", "Waylay"], "matches": 352, "winPercent": 60.2}},
+    {"map": "Bind", "inPool": true, "period": "Act II, Mar–Apr 2026", "thisAct": false, "best": {"agents": ["Chamber", "Clove", "Jett", "Reyna", "Skye"], "matches": 451, "winPercent": 73.8}},
+    {"map": "Corrode", "inPool": true, "period": "Act I, Jan–Mar 2026", "thisAct": false, "best": {"agents": ["Chamber", "Clove", "Fade", "Jett", "Neon"], "matches": 728, "winPercent": 59.1}},
+    {"map": "Haven", "inPool": true, "period": "Act V, Aug–Oct 2026", "thisAct": false, "best": {"agents": ["Clove", "Jett", "Killjoy", "Neon", "Sova"], "matches": 664, "winPercent": 58.9}},
+    {"map": "Lotus", "inPool": true, "period": "Act V, Aug–Oct 2026", "thisAct": false, "best": {"agents": ["Clove", "Fade", "Jett", "Reyna", "Vyse"], "matches": 381, "winPercent": 59.3}},
+    {"map": "Summit", "inPool": true, "period": "Act V, Aug–Oct 2026", "thisAct": false, "best": {"agents": ["Clove", "Cypher", "Fade", "Jett", "Phoenix"], "matches": 690, "winPercent": 61.3}},
+    {"map": "Sunset", "inPool": true, "period": "Act V, Aug–Oct 2026", "thisAct": false, "best": {"agents": ["Clove", "Cypher", "Neon", "Phoenix", "Sova"], "matches": 1283, "winPercent": 61.3}},
+    {"map": "Ascent", "inPool": false, "period": "Act V, Aug–Oct 2026", "thisAct": false, "best": {"agents": ["Clove", "Jett", "Killjoy", "Phoenix", "Sova"], "matches": 1868, "winPercent": 57.9}},
+    {"map": "Split", "inPool": false, "period": "Act V, Aug–Oct 2026", "thisAct": false, "best": {"agents": ["Clove", "Cypher", "Neon", "Raze", "Skye"], "matches": 436, "winPercent": 58.0}},
+    {"map": "Breeze", "inPool": false, "period": "Act IV, Jun–Aug 2026", "thisAct": false, "best": {"agents": ["Chamber", "Clove", "Jett", "Phoenix", "Sova"], "matches": 626, "winPercent": 65.8}},
+    {"map": "Pearl", "inPool": false, "period": "Act III, Apr–Jun 2026", "thisAct": false, "best": {"agents": ["Clove", "Cypher", "Fade", "Jett", "Phoenix"], "matches": 399, "winPercent": 71.7}},
+    {"map": "Fracture", "inPool": false, "period": "Act III, Apr–Jun 2026", "thisAct": false, "best": {"agents": ["Brimstone", "Cypher", "Jett", "Tejo", "Waylay"], "matches": 297, "winPercent": 67.3}},
+    {"map": "Icebox", "inPool": false, "period": "Act IV of 2025, Jun–Aug 2025", "thisAct": false, "best": {"agents": ["Iso", "Jett", "Killjoy", "Sova", "Viper"], "matches": 826, "winPercent": 55.7}}
+  ]
+}

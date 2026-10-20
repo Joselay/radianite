@@ -73,6 +73,12 @@ class MatchHistory(
         return summarize(puuid, load(entries.map { it.matchId }), rr)
     }
 
+    /** Every match kept on the phone for this account, newest first, without going online. */
+    suspend fun stored(): List<MatchSummary> {
+        val kept = local.readAll(Slots.matches).onEach { records.putIfAbsent(it.matchId, it) }
+        return summarize(riot.puuid(), kept, rr = emptyList())
+    }
+
     /** Recent competitive games' rank changes, newest first. Shared briefly so screens loading together fetch once. */
     suspend fun rankedRatingChanges(maxAgeMillis: Long = RR_MAX_AGE_MILLIS): List<RankedRatingChange> {
         val puuid = riot.puuid()

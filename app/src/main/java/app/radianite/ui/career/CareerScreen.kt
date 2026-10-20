@@ -347,22 +347,6 @@ private fun RecentStats(stats: CareerStats?, loading: Boolean) {
                         }
                     }
                 }
-                if (stats.maps.isNotEmpty()) {
-                    SectionHeader("MAPS")
-                    stats.maps.forEach { map ->
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-                            Text(content?.map(map.mapId)?.name ?: "Map", modifier = Modifier.width(96.dp), maxLines = 1)
-                            ProgressBar(map.winPercent / 100f, if (map.winPercent >= 50) WinGreen else ValorantRed, Modifier.weight(1f))
-                            Text(
-                                "${map.winPercent}% · ${map.matches}",
-                                fontFamily = Mono,
-                                fontSize = 11.sp,
-                                color = Muted,
-                                modifier = Modifier.width(72.dp).padding(start = 8.dp),
-                            )
-                        }
-                    }
-                }
             }
         }
     }

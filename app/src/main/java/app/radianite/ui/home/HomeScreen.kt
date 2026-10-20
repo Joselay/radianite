@@ -46,6 +46,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.radianite.AppContainer
 import app.radianite.R
 import app.radianite.data.account.SavedAccount
+import app.radianite.data.comps.MapGuide
 import app.radianite.data.match.MatchSummary
 import app.radianite.data.store.StoreBundle
 import app.radianite.data.store.StoreSkin
@@ -63,6 +64,9 @@ import app.radianite.ui.common.LoadingPane
 import app.radianite.ui.common.LocalAccountCard
 import app.radianite.ui.common.LocalGameContent
 import app.radianite.ui.common.rememberMotionEnabled
+import app.radianite.ui.maps.MapDetailScreen
+import app.radianite.ui.maps.MapsScreen
+import app.radianite.ui.maps.MapsViewModel
 import app.radianite.ui.matches.MatchDetailScreen
 import app.radianite.ui.matches.MatchesScreen
 import app.radianite.ui.matches.MatchesViewModel
@@ -80,6 +84,7 @@ import kotlinx.coroutines.launch
 private enum class Tab(val label: String, @DrawableRes val icon: Int) {
     STORE("Store", R.drawable.ic_tab_store),
     MATCHES("Matches", R.drawable.ic_tab_matches),
+    MAPS("Maps", R.drawable.ic_tab_maps),
     CAREER("Career", R.drawable.ic_tab_career),
     COLLECTION("Collection", R.drawable.ic_tab_collection),
 }
@@ -99,6 +104,10 @@ private sealed interface Overlay {
 
     data class Bundle(val bundle: StoreBundle) : Overlay {
         override val key get() = "bundle-${bundle.uuid ?: bundle.name}"
+    }
+
+    data class MapPage(val map: MapGuide) : Overlay {
+        override val key get() = "map-${map.map}"
     }
 
     data object Leaderboard : Overlay {
@@ -221,6 +230,11 @@ private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, on
                             onOpenAccounts = onOpenAccounts,
                             onOpenMatch = { open(Overlay.Match(it.record.matchId)) },
                         )
+                        Tab.MAPS -> MapsScreen(
+                            viewModel = viewModel(key = "maps-$account") { MapsViewModel(container.teamComps, data.matches) },
+                            onOpenAccounts = onOpenAccounts,
+                            onOpenMap = { open(Overlay.MapPage(it)) },
+                        )
                         Tab.CAREER -> CareerScreen(
                             viewModel = viewModel(key = "career-$account") { CareerViewModel(data.players, data.matches) },
                             onOpenLeaderboard = { open(Overlay.Leaderboard) },
@@ -276,6 +290,20 @@ private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, on
                         onOpenSkin = { if (it.skinUuid != null) open(Overlay.Skin(it)) },
                         onBack = ::back,
                     )
+                    is Overlay.MapPage -> {
+                        // Shares the Maps tab's view model, so the page shows the same guide and games as the card it came from.
+                        val mapsViewModel = viewModel(key = "maps-$account") { MapsViewModel(container.teamComps, data.matches) }
+                        val maps by mapsViewModel.state.collectAsStateWithLifecycle()
+                        val content = LocalGameContent.current
+                        val guide = maps.guide
+                        val map = guide?.maps?.find { it.map == top.map.map } ?: top.map
+                        if (guide == null) LoadingPane() else MapDetailScreen(
+                            map = map,
+                            guide = guide,
+                            play = content?.mapPathNamed(map.map)?.let { maps.play[it] },
+                            onBack = ::back,
+                        )
+                    }
                     Overlay.Leaderboard -> LeaderboardScreen(
                         viewModel = viewModel(key = "leaderboard-$account") { LeaderboardViewModel(data.players) },
                         onBack = ::back,

@@ -141,8 +141,27 @@ class MatchRecordTest {
         assertEquals("agent-jett", jett.agentId)
         assertEquals(2, jett.matches)
         assertEquals(50, jett.winPercent)
+    }
 
-        assertEquals(setOf("/game/maps/ascent/ascent", "/game/maps/bonsai/bonsai"), stats.maps.map { it.mapId }.toSet())
+    @Test
+    fun `map play counts your record and agents, in draft queues only`() {
+        val win = record().summaryFor("me")!!
+        val loss = record(teamMatch.replace("\"matchId\": \"m1\"", "\"matchId\": \"m2\""))
+            .let { it.copy(teams = it.teams.map { t -> t.copy(won = t.teamId == "Red") }) }
+            .summaryFor("me")!!
+        val swiftplay = win.copy(record = win.record.copy(matchId = "m3", queueId = "swiftplay"))
+
+        val ascent = mapPlay(listOf(win, loss, swiftplay)).getValue("/game/maps/ascent/ascent")
+        assertEquals(2, ascent.matches)
+        assertEquals(1, ascent.wins)
+        assertEquals(listOf(AgentResult("agent-jett", picks = 2, wins = 1)), ascent.mine)
+    }
+
+    @Test
+    fun `win rates round to the nearest percent`() {
+        assertEquals(67, AgentResult("a", picks = 3, wins = 2).winPercent)
+        assertEquals(33, AgentResult("a", picks = 3, wins = 1).winPercent)
+        assertEquals(0, AgentResult("a", picks = 0, wins = 0).winPercent)
     }
 
     @Test

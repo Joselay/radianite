@@ -217,7 +217,6 @@ data class CareerStats(
     val acs: Int,
     val adr: Int,
     val agents: List<AgentStat>,
-    val maps: List<MapStat>,
 ) {
     val winPercent: Int get() = if (matches > 0) wins * 100 / matches else 0
     val kd: Double get() = kills.toDouble() / deaths.coerceAtLeast(1)
@@ -227,10 +226,6 @@ data class CareerStats(
 }
 
 data class AgentStat(val agentId: String, val matches: Int, val wins: Int, val kd: Double, val acs: Int) {
-    val winPercent: Int get() = if (matches > 0) wins * 100 / matches else 0
-}
-
-data class MapStat(val mapId: String, val matches: Int, val wins: Int) {
     val winPercent: Int get() = if (matches > 0) wins * 100 / matches else 0
 }
 
@@ -259,8 +254,5 @@ fun careerStats(summaries: List<MatchSummary>): CareerStats {
                 acs = if (agentRounds > 0) games.sumOf { it.me.score } / agentRounds else 0,
             )
         }.sortedWith(compareByDescending<AgentStat> { it.matches }.thenByDescending { it.wins }),
-        maps = team.groupBy { it.record.mapId.lowercase() }.map { (mapId, games) ->
-            MapStat(mapId, games.size, games.count { it.outcome == Outcome.WIN })
-        }.sortedByDescending { it.matches },
     )
 }
