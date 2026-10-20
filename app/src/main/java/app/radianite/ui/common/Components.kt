@@ -61,6 +61,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import app.radianite.R
+import app.radianite.data.content.CardArt
 import app.radianite.data.content.GameContent
 import app.radianite.data.match.Outcome
 import app.radianite.ui.theme.Display
@@ -74,6 +75,9 @@ import kotlinx.coroutines.delay
 
 /** The current patch's names and art, from the Content module; null until it first loads. */
 val LocalGameContent = compositionLocalOf<GameContent?> { null }
+
+/** The shown account's player card, for the accounts button; null until it's known. */
+val LocalAccountCard = compositionLocalOf<String?> { null }
 
 val WinGreen = Color(0xFF3DDC97)
 val DrawGrey = Color(0xFFB0B8B4)
@@ -122,10 +126,22 @@ fun BackButton(onBack: () -> Unit) {
     IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back") }
 }
 
-/** Opens the accounts sheet: switching, adding and signing out. */
+/** Opens the accounts sheet: switching, adding and signing out. Shows the account's player card once it's known. */
 @Composable
 fun AccountsButton(onClick: () -> Unit) {
-    IconButton(onClick = onClick) { Icon(painterResource(R.drawable.ic_account), contentDescription = "Accounts", tint = Muted) }
+    IconButton(onClick = onClick) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(painterResource(R.drawable.ic_account), contentDescription = "Accounts", tint = Muted)
+            // Covers the icon once it loads; the icon stays if it can't.
+            LocalAccountCard.current?.let { card ->
+                AsyncImage(
+                    model = CardArt.small(card),
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)),
+                )
+            }
+        }
+    }
 }
 
 /** A filter chip in the app's colors: red when picked, quiet otherwise. */

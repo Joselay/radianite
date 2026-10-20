@@ -3,10 +3,12 @@ package app.radianite.data.account
 import app.radianite.data.Failure
 import app.radianite.data.LocalStore
 import app.radianite.data.Slots
+import app.radianite.data.optional
 import app.radianite.data.riot.AuthTokens
 import app.radianite.data.riot.RiotPlayerData
 import app.radianite.data.riot.RiotSession
 import app.radianite.data.riot.RiotSignIn
+import app.radianite.data.riot.SessionExpiredException
 import app.radianite.data.toFailure
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -14,8 +16,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -36,9 +40,9 @@ sealed interface AccountState {
     data class SignedIn(val puuid: String, val riotId: String) : AccountState
 }
 
-/** An account that's signed in on this device, shown or not. */
+/** An account that's signed in on this device, shown or not. [cardId] is its equipped player card, once known. */
 @Serializable
-data class SavedAccount(val puuid: String, val riotId: String)
+data class SavedAccount(val puuid: String, val riotId: String, val cardId: String? = null)
 
 @Serializable
 data class AccountIndex(val active: String? = null, val accounts: List<SavedAccount> = emptyList())
@@ -85,6 +89,13 @@ class Account(
                     .distinctUntilChanged()
                     .flatMapLatest { puuid -> puuid?.let { riotFor(it).expired.map { puuid } } ?: emptyFlow() }
                     .collect { puuid -> mutex.withLock { if (activePuuid() == puuid) end(puuid, Failure.Expired) } }
+            }
+            // The player card can change in game, so it's read again each time an account is shown.
+            launch {
+                state.map { (it as? AccountState.SignedIn)?.puuid }
+                    .distinctUntilChanged()
+                    .filterNotNull()
+                    .collectLatest { refreshCard(it) }
             }
             mutex.withLock { restore() }
         }
@@ -165,11 +176,29 @@ class Account(
         if (next != null) show(next) else _state.value = AccountState.SignedOut(failure)
     }
 
+    /** Saves [puuid]'s equipped player card, when Riot says and it has changed. */
+    private suspend fun refreshCard(puuid: String) {
+        // A session gone mid-call is already announced on expired; the card just waits for the next show.
+        val loadout = try {
+            optional("Player card") { riotFor(puuid).playerLoadout() }
+        } catch (e: SessionExpiredException) {
+            null
+        }
+        val cardId = loadout?.identity?.playerCardId?.takeIf { it.isNotBlank() } ?: return
+        mutex.withLock {
+            val index = device.read(Slots.accounts) ?: return
+            if (index.accounts.none { it.puuid == puuid && it.cardId != cardId }) return
+            val updated = index.copy(accounts = index.accounts.map { if (it.puuid == puuid) it.copy(cardId = cardId) else it })
+            device.write(Slots.accounts, updated)
+            _saved.value = updated.accounts
+        }
+    }
+
     private fun activePuuid() = (_state.value as? AccountState.SignedIn)?.puuid
 
-    /** [session]'s account added or renamed, and made the shown one. */
+    /** [session]'s account added or renamed, keeping its card, and made the shown one. */
     private fun AccountIndex.with(session: RiotSession): AccountIndex {
-        val entry = SavedAccount(session.puuid, session.riotId)
+        val entry = SavedAccount(session.puuid, session.riotId, accounts.find { it.puuid == session.puuid }?.cardId)
         val accounts = if (accounts.any { it.puuid == session.puuid }) accounts.map { if (it.puuid == session.puuid) entry else it } else accounts + entry
         return AccountIndex(active = session.puuid, accounts = accounts)
     }

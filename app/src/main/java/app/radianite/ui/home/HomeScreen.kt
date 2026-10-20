@@ -57,6 +57,7 @@ import app.radianite.ui.career.LeaderboardViewModel
 import app.radianite.ui.collection.CollectionScreen
 import app.radianite.ui.collection.CollectionViewModel
 import app.radianite.ui.common.LoadingPane
+import app.radianite.ui.common.LocalAccountCard
 import app.radianite.ui.common.LocalGameContent
 import app.radianite.ui.common.rememberMotionEnabled
 import app.radianite.ui.matches.MatchDetailScreen
@@ -125,7 +126,8 @@ fun HomeScreen(
         }
     }
     var showAccounts by rememberSaveable { mutableStateOf(false) }
-    CompositionLocalProvider(LocalGameContent provides content) {
+    val card = accounts.find { it.puuid == state.puuid }?.cardId
+    CompositionLocalProvider(LocalGameContent provides content, LocalAccountCard provides card) {
         SignedInTabs(container, state, onOpenAccounts = { showAccounts = true })
     }
     if (showAccounts) {

@@ -68,6 +68,23 @@ class AccountTest {
     }
 
     @Test
+    fun `the shown account's player card is saved, and kept when it signs in again`() = runTest {
+        val app = Fixture(tmp.root)
+        app.servers.json("players/puuid-1/playerloadout", """{"Identity":{"PlayerCardID":"card-1"}}""")
+        val account = app.account(backgroundScope)
+
+        account.completeSignIn(AuthTokens("fresh", "id", 3600))
+
+        assertEquals("card-1", account.saved.first { it.single().cardId != null }.single().cardId)
+        assertEquals("card-1", app.device.read(Slots.accounts)?.accounts?.single()?.cardId)
+
+        app.servers.on("players/puuid-1/playerloadout") { Reply(503) }
+        account.completeSignIn(AuthTokens("again", "id", 3600))
+
+        assertEquals("card-1", account.saved.value.single().cardId)
+    }
+
+    @Test
     fun `a failed sign-in says why`() = runTest {
         val app = Fixture(tmp.root)
         app.servers.on("auth.riotgames.com/userinfo") { Reply(503) }

@@ -1,6 +1,7 @@
 package app.radianite.ui.account
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.radianite.R
 import app.radianite.data.account.SavedAccount
+import app.radianite.data.content.CardArt
 import app.radianite.ui.VersionLabel
 import app.radianite.ui.common.SectionHeader
 import app.radianite.ui.theme.Display
@@ -46,6 +48,7 @@ import app.radianite.ui.theme.Ink
 import app.radianite.ui.theme.InkRaised
 import app.radianite.ui.theme.Muted
 import app.radianite.ui.theme.ValorantRed
+import coil3.compose.AsyncImage
 
 /**
  * The signed-in accounts: tap one to show it, add another, or sign the shown one out. Signing out asks
@@ -79,6 +82,7 @@ fun AccountsSheet(
                     val selected = account.puuid == shownPuuid
                     AccountRow(
                         riotId = account.riotId,
+                        cardId = account.cardId,
                         selected = selected,
                         onClick = {
                             if (!selected) onSwitch(account.puuid)
@@ -127,7 +131,7 @@ fun AccountsSheet(
 }
 
 @Composable
-private fun AccountRow(riotId: String, selected: Boolean, onClick: () -> Unit) {
+private fun AccountRow(riotId: String, cardId: String?, selected: Boolean, onClick: () -> Unit) {
     val (name, tag) = riotId.split('#', limit = 2).let { it[0] to it.getOrNull(1) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -139,14 +143,17 @@ private fun AccountRow(riotId: String, selected: Boolean, onClick: () -> Unit) {
             .semantics { this.selected = selected }
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
+        // The account's player card, over its initial, which shows until the card loads or if it can't.
         Box(
             Modifier
-                .size(32.dp)
+                .size(40.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(if (selected) ValorantRed else InkRaised),
+                .background(if (selected) ValorantRed else InkRaised)
+                .then(if (selected) Modifier.border(2.dp, ValorantRed, RoundedCornerShape(6.dp)) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
-            Text(name.take(1).uppercase(), fontFamily = Display, fontSize = 16.sp)
+            Text(name.take(1).uppercase(), fontFamily = Display, fontSize = 18.sp)
+            AsyncImage(model = CardArt.small(cardId), contentDescription = null, modifier = Modifier.matchParentSize())
         }
         Spacer(Modifier.width(12.dp))
         Row(Modifier.weight(1f), verticalAlignment = Alignment.Bottom) {
@@ -167,7 +174,7 @@ private fun SheetAction(icon: Int, label: String, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
-        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
             Icon(painterResource(icon), contentDescription = null, tint = Muted)
         }
         Spacer(Modifier.width(12.dp))
