@@ -11,6 +11,14 @@ fun git(vararg args: String) = providers.exec { commandLine("git", *args) }.stan
 val commitCount = git("rev-list", "--count", "HEAD").toInt()
 val commit = git("rev-parse", "--short", "HEAD") + if (git("status", "--porcelain").isNotEmpty()) "-dirty" else ""
 
+// Releases are versioned "1.2.3", passed in by the release workflow, which also tags them "v1.2.3". Any other
+// build is a development build after the last release: "1.2.3-dev+abc1234".
+val lastRelease = providers.exec {
+    commandLine("git", "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*.[0-9]*.[0-9]*")
+    isIgnoreExitValue = true
+}.standardOutput.asText.get().trim().removePrefix("v").ifEmpty { "0.0.0" }
+val appVersion = providers.gradleProperty("releaseVersion").orNull ?: "$lastRelease-dev+$commit"
+
 // A keystore.properties at the project root (kept out of git) signs release builds for distributing;
 // without one they fall back to the debug key, which is fine for sideloading onto your own phone.
 val keystore = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { file ->
@@ -36,9 +44,9 @@ android {
         applicationId = "app.radianite"
         minSdk = 28
         targetSdk = 36
+        // Counts commits, so every build installs over the one before.
         versionCode = commitCount
-        // Release tags are "v" and the version code, so the installed label and the update offered read the same.
-        versionName = "$commitCount ($commit)"
+        versionName = appVersion
     }
 
     buildTypes {

@@ -36,6 +36,7 @@ import app.radianite.data.riot.RiotSignIn
 import app.radianite.data.store.StoreRepository
 import app.radianite.data.store.Wishlist
 import app.radianite.data.update.AppUpdates
+import app.radianite.data.update.AppVersion
 import app.radianite.sync.StoreSync
 import app.radianite.update.UpdateCheck
 import app.radianite.widget.StoreWidget
@@ -119,9 +120,12 @@ class AppContainer(context: Context) {
 
     val wishlist: Wishlist by lazy { Wishlist(device) }
 
-    /** New builds from the app's GitHub releases; null in debug builds, which are a separate app. */
+    /** New versions from the app's GitHub releases; null in debug builds, which are a separate app. */
     val updates: AppUpdates? by lazy {
-        if (BuildConfig.DEBUG) null else AppUpdates(http.newBuilder().cache(null).build(), json, device, File(appContext.cacheDir, "updates"), BuildConfig.VERSION_CODE)
+        if (BuildConfig.DEBUG) return@lazy null
+        // A build from before versions read "1.2.3" counts as older than any of them.
+        val installed = AppVersion.parse(BuildConfig.VERSION_NAME) ?: AppVersion(0, 0, 0)
+        AppUpdates(http.newBuilder().cache(null).build(), json, device, File(appContext.cacheDir, "updates"), installed)
     }
 
     /** Hands a downloaded update to Android's installer. */

@@ -13,9 +13,24 @@ import okhttp3.Request
 import java.io.File
 import java.io.IOException
 
-/** A published build of the app: [versionCode] orders builds, [notes] says what changed. */
+/** A version of the app, as in "1.2.3"; newer versions compare greater. */
+data class AppVersion(val major: Int, val minor: Int, val patch: Int) : Comparable<AppVersion> {
+    override fun compareTo(other: AppVersion) = compareValuesBy(this, other, AppVersion::major, AppVersion::minor, AppVersion::patch)
+
+    override fun toString() = "$major.$minor.$patch"
+
+    companion object {
+        private val PATTERN = Regex("""^v?(\d+)\.(\d+)\.(\d+)""")
+
+        /** Reads "1.2.3" or "v1.2.3", ignoring anything after, like "-dev+abc1234"; null for anything else. */
+        fun parse(text: String): AppVersion? =
+            PATTERN.find(text)?.destructured?.let { (major, minor, patch) -> AppVersion(major.toInt(), minor.toInt(), patch.toInt()) }
+    }
+}
+
+/** A published version of the app: [notes] says what changed. */
 data class AppRelease(
-    val versionCode: Int,
+    val version: AppVersion,
     val title: String,
     val notes: String,
     val apkUrl: String,
@@ -23,14 +38,14 @@ data class AppRelease(
     val apkBytes: Long,
 )
 
-/** Which releases the user has put off, and been notified about, so each one asks and notifies once. */
+/** The versions the user last put off, and was notified about, so each release asks and notifies once. */
 @Serializable
-data class UpdateMarks(val dismissed: Int = 0, val announced: Int = 0)
+data class UpdateMarks(val dismissed: String? = null, val announced: String? = null)
 
 /**
- * New builds of the app, published as GitHub releases of the app's repository, each tagged "v" and its version
- * code and carrying the signed APK. Finds a release newer than the installed build, remembers which ones the user
- * put off or was told about, and downloads the APK for Android's installer.
+ * New versions of the app, published as GitHub releases of the app's repository, each tagged with its version
+ * ("v1.2.3") and carrying the signed APK. Finds a release newer than the installed version, remembers which ones
+ * the user put off or was told about, and downloads the APK for Android's installer.
  */
 class AppUpdates(
     private val http: OkHttpClient,
@@ -38,12 +53,12 @@ class AppUpdates(
     private val device: LocalStore,
     /** Where APKs download to; only ever holds the newest one. */
     private val downloads: File,
-    private val installedVersion: Int,
+    private val installedVersion: AppVersion,
     private val latestUrl: String = LATEST_RELEASE_URL,
 ) {
-    /** The newest release, when it's newer than the installed build. Throws when GitHub can't be reached. */
+    /** The newest release, when it's newer than the installed version. Throws when GitHub can't be reached. */
     suspend fun newer(): AppRelease? {
-        val release = latest()?.takeIf { it.versionCode > installedVersion }
+        val release = latest()?.takeIf { it.version > installedVersion }
         // Only the newer build's APK is worth keeping; one for a build that's now installed has done its job.
         val keep = apkFile(release)?.name
         withContext(Dispatchers.IO) { downloads.listFiles()?.filterNot { keep != null && it.name.startsWith(keep) }?.forEach { it.delete() } }
@@ -51,15 +66,15 @@ class AppUpdates(
     }
 
     /** Whether [release] should still ask to be installed: it does until the user puts it off. */
-    suspend fun shouldAsk(release: AppRelease) = marks().dismissed < release.versionCode
+    suspend fun shouldAsk(release: AppRelease) = !release.isAtMost(marks().dismissed)
 
-    suspend fun putOff(release: AppRelease) = device.write(Slots.updateMarks, marks().copy(dismissed = release.versionCode))
+    suspend fun putOff(release: AppRelease) = device.write(Slots.updateMarks, marks().copy(dismissed = release.version.toString()))
 
     /** True the first time it's called for [release], so a release is notified about once. */
     suspend fun firstAnnouncement(release: AppRelease): Boolean {
         val marks = marks()
-        if (marks.announced >= release.versionCode) return false
-        device.write(Slots.updateMarks, marks.copy(announced = release.versionCode))
+        if (release.isAtMost(marks.announced)) return false
+        device.write(Slots.updateMarks, marks.copy(announced = release.version.toString()))
         return true
     }
 
@@ -107,7 +122,9 @@ class AppUpdates(
 
     private suspend fun marks() = device.read(Slots.updateMarks) ?: UpdateMarks()
 
-    private fun apkFile(release: AppRelease?) = release?.let { File(downloads, "radianite-v${it.versionCode}.apk") }
+    private fun apkFile(release: AppRelease?) = release?.let { File(downloads, "radianite-${it.version}.apk") }
+
+    private fun AppRelease.isAtMost(marked: String?) = marked?.let(AppVersion::parse)?.let { version <= it } ?: false
 
     companion object {
         const val LATEST_RELEASE_URL = "https://api.github.com/repos/Joselay/radianite/releases/latest"
@@ -129,13 +146,13 @@ data class GitHubAsset(
     val size: Long = 0,
 )
 
-/** Null for a release that isn't one of the app's builds: a tag other than "v" and a version code, or no APK. */
+/** Null for a release that isn't one of the app's versions: a tag other than "v1.2.3", or no APK. */
 fun GitHubRelease.toAppRelease(): AppRelease? {
-    val versionCode = tagName.removePrefix("v").toIntOrNull() ?: return null
+    val version = AppVersion.parse(tagName)?.takeIf { tagName == "v$it" } ?: return null
     val apk = assets.firstOrNull { it.name.endsWith(".apk") } ?: return null
     return AppRelease(
-        versionCode = versionCode,
-        title = name?.takeIf { it.isNotBlank() } ?: "Radianite $tagName",
+        version = version,
+        title = name?.takeIf { it.isNotBlank() } ?: "Radianite $version",
         notes = body.orEmpty().trim(),
         apkUrl = apk.downloadUrl,
         apkBytes = apk.size,

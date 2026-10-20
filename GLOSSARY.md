@@ -50,6 +50,6 @@ Domain language for Radianite. Module names in code follow these terms.
 
 **Store sync** (`StoreSync`): fetches every signed-in account's store in the background after each rotation, feeding the home-screen widget (`StoreWidget`) and wishlist announcements.
 
-**App updates** (`AppUpdates`): new builds of the app, published as GitHub releases tagged "v" and the version code. Offers a newer one once per release, in the app and as a notification (`UpdateCheck`), downloads its APK and hands it to Android's installer. Release builds only; every release is signed with the same key.
+**App updates** (`AppUpdates`): new versions of the app, published as GitHub releases tagged with the version ("v1.2.3", an `AppVersion`). Offers a newer one once per release, in the app and as a notification (`UpdateCheck`), downloads its APK and hands it to Android's installer. Release builds only; every release is signed with the same key.
 
 **Failure** (`Failure`): why a load failed, in the terms the app reacts to: expired, maintenance, rate-limited, offline, a Riot error, or other.
