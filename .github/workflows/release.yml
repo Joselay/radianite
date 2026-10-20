@@ -23,6 +23,9 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@v3
+        with:
+          # The default also asks for "tools", which the SDK no longer has, and fails the job.
+          packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
       - name: Signing key
         # Every release must be signed with the same key, or installed apps can't update to it.
