@@ -3,9 +3,9 @@ package app.radianite.data.riot
 import app.radianite.data.LocalStore
 import app.radianite.data.Slots
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -84,10 +84,13 @@ class RiotPlayerData(
         .followSslRedirects(false)
         .build()
 
-    private val _expired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val _expired = MutableStateFlow(false)
 
-    /** Fires when a call finds the Riot session gone, so the app can return to sign-in. */
-    val expired: SharedFlow<Unit> = _expired.asSharedFlow()
+    /**
+     * True once a call finds the Riot session gone, until a new session is adopted, so the app can return to
+     * sign-in. A state rather than an event: whoever starts watching after the call still finds out.
+     */
+    val expired: StateFlow<Boolean> = _expired.asStateFlow()
 
     suspend fun savedSession(): RiotSession? = session ?: store.read(Slots.session)?.also { session = it }
 
@@ -98,6 +101,7 @@ class RiotPlayerData(
     suspend fun adopt(session: RiotSession, cookieHeader: String?) = mutex.withLock {
         cookies.replace(cookieHeader)
         save(session)
+        _expired.value = false
     }
 
     /** Forgets the tokens and the Riot cookies. Waits for any renewal in flight, so it can't resurrect them. */
@@ -187,7 +191,7 @@ class RiotPlayerData(
     private suspend fun <T> expiring(block: suspend () -> T): T = try {
         block()
     } catch (e: SessionExpiredException) {
-        _expired.tryEmit(Unit)
+        _expired.value = true
         throw e
     }
 

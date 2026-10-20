@@ -183,6 +183,18 @@ class AccountTest {
     }
 
     @Test
+    fun `a session found gone before the app was watching still signs it out`() = runTest {
+        val app = Fixture(tmp.root).apply { signedIn("puuid-1") }
+        app.servers.on("/store/v1/wallet/") { Reply(401) }
+        app.cookies.header = null
+        runCatching { app.riot.wallet() }
+
+        val state = app.account(backgroundScope).state.first { it is AccountState.SignedOut }
+
+        assertEquals(AccountState.SignedOut(Failure.Expired), state)
+    }
+
+    @Test
     fun `an account signed in by an older build moves into its own store, cookies and all`() = runTest {
         val app = Fixture(tmp.root)
         app.device.write(Slots.session, app.session(accessToken = "legacy"))

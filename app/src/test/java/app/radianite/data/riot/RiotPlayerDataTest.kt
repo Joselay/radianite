@@ -6,9 +6,9 @@ import app.radianite.data.Slots
 import app.radianite.data.bearer
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -73,13 +73,11 @@ class RiotPlayerDataTest {
     @Test
     fun `tokens rejected again after renewal expire the session`() = runTest {
         val app = Fixture(tmp.root).apply { signIn(); walletAccepting() }
-        val expired = async { app.riot.expired.first() }
-        testScheduler.runCurrent()
 
         val error = runCatching { app.riot.wallet() }.exceptionOrNull()
 
         assertTrue("was $error", error is SessionExpiredException)
-        expired.await()
+        assertTrue(app.riot.expired.value)
     }
 
     @Test
@@ -93,16 +91,17 @@ class RiotPlayerDataTest {
     }
 
     @Test
-    fun `without cookies the session expires and listeners hear about it`() = runTest {
+    fun `without cookies the session expires, until a new one is adopted`() = runTest {
         val app = Fixture(tmp.root).apply { signIn(); walletAccepting("new") }
         app.cookies.header = null
-        val expired = async { app.riot.expired.first() }
-        testScheduler.runCurrent()
 
         val error = runCatching { app.riot.wallet() }.exceptionOrNull()
 
         assertTrue(error is SessionExpiredException)
-        expired.await()
+        assertTrue("whoever looks later still sees it", app.riot.expired.value)
+
+        app.riot.adopt(app.session(accessToken = "new"), "ssid=fresh")
+        assertFalse(app.riot.expired.value)
     }
 
     @Test

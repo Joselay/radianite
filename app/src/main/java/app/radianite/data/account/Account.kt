@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -87,7 +88,7 @@ class Account(
             launch {
                 state.map { (it as? AccountState.SignedIn)?.puuid }
                     .distinctUntilChanged()
-                    .flatMapLatest { puuid -> puuid?.let { riotFor(it).expired.map { puuid } } ?: emptyFlow() }
+                    .flatMapLatest { puuid -> puuid?.let { riotFor(it).expired.filter { gone -> gone }.map { puuid } } ?: emptyFlow() }
                     .collect { puuid -> mutex.withLock { if (activePuuid() == puuid) end(puuid, Failure.Expired) } }
             }
             // The player card can change in game, so it's read again each time an account is shown.
