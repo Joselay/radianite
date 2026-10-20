@@ -1,6 +1,9 @@
 package app.radianite.ui.bundle
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,6 +33,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -56,7 +61,6 @@ import app.radianite.ui.common.BackButton
 import app.radianite.ui.common.SectionHeader
 import app.radianite.ui.common.Skeleton
 import app.radianite.ui.common.countdown
-import app.radianite.ui.common.plural
 import app.radianite.ui.common.rememberNow
 import app.radianite.ui.theme.Display
 import app.radianite.ui.theme.Ink
@@ -82,10 +86,17 @@ fun BundleDetailScreen(
 ) {
     BackHandler(onBack = onBack)
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+    // The hero already names the bundle; the bar takes the name only once the hero scrolls away.
+    val heroGone by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(bundle.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = {
+                    AnimatedVisibility(heroGone, enter = fadeIn(), exit = fadeOut()) {
+                        Text(bundle.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                },
                 navigationIcon = { BackButton(onBack) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
@@ -93,6 +104,7 @@ fun BundleDetailScreen(
     ) { padding ->
         val loaded = (state as? BundleDetailUiState.Loaded)?.contents
         LazyColumn(
+            state = listState,
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
@@ -117,7 +129,7 @@ fun BundleDetailScreen(
                         }
                     }
                     if (contents.skins.isNotEmpty()) {
-                        item(key = "skins-header") { SectionHeader("SKINS · ${contents.skins.size}") }
+                        item(key = "skins-header") { SectionHeader("SKINS") }
                         itemsIndexed(contents.skins, key = { index, _ -> "skin-$index" }) { _, entry ->
                             SkinRow(entry, wishlisted = entry.skin.skinUuid in wishlisted, onClick = { onOpenSkin(entry.skin) })
                         }
@@ -182,7 +194,10 @@ private fun Hero(bundle: StoreBundle, heroUrl: String?) {
     }
 }
 
-/** A skin with its rarity, variant swatches and upgrade count; opens the skin's page with its previews. */
+/**
+ * A skin with its rarity, prices and variant swatches; opens the skin's page, which plays its upgrades and
+ * variants, so the row doesn't count them.
+ */
 @Composable
 private fun SkinRow(entry: BundleSkin, wishlisted: Boolean, onClick: () -> Unit) {
     val skin = entry.skin
@@ -229,9 +244,9 @@ private fun SkinRow(entry: BundleSkin, wishlisted: Boolean, onClick: () -> Unit)
                 Spacer(Modifier.weight(1f))
                 Prices(skin.priceVp, entry.basePriceVp, color = tierColor)
             }
-            entry.detail?.let { detail ->
+            val swatches = entry.detail?.chromas.orEmpty().mapNotNull { it.swatchUrl }.takeIf { it.size > 1 }
+            if (swatches != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val swatches = detail.chromas.mapNotNull { it.swatchUrl }
                     swatches.take(MAX_SWATCHES).forEach { swatch ->
                         AsyncImage(
                             model = swatch,
@@ -243,11 +258,6 @@ private fun SkinRow(entry: BundleSkin, wishlisted: Boolean, onClick: () -> Unit)
                                 .background(Ink),
                         )
                     }
-                    val summary = listOfNotNull(
-                        detail.chromas.size.takeIf { it > 1 }?.let { plural(it, "variant", "variants") },
-                        detail.levels.size.takeIf { it > 1 }?.let { plural(it, "level", "levels") },
-                    ).joinToString(" · ")
-                    if (summary.isNotEmpty()) Text(summary, color = Muted, fontSize = 11.sp, fontFamily = Mono, modifier = Modifier.padding(start = 2.dp))
                 }
             }
         }

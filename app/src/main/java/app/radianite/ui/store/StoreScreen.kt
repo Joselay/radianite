@@ -274,22 +274,6 @@ private fun BundleCard(bundle: StoreBundle, onClick: () -> Unit) {
     ) {
         AsyncImage(model = bundle.artUrl, contentDescription = bundle.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Ink.copy(alpha = 0.9f)))))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(10.dp)
-                .background(Ink.copy(alpha = 0.75f), RoundedCornerShape(50))
-                .padding(start = 10.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
-        ) {
-            Text(
-                if (bundle.items.isEmpty()) "DETAILS" else plural(bundle.items.size, "ITEM", "ITEMS"),
-                fontFamily = Mono,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Icon(painterResource(R.drawable.ic_arrow_forward), contentDescription = null, modifier = Modifier.size(14.dp))
-        }
         Column(
             Modifier
                 .align(Alignment.BottomStart)
@@ -304,7 +288,7 @@ private fun BundleCard(bundle: StoreBundle, onClick: () -> Unit) {
                 }
                 Spacer(Modifier.weight(1f))
                 val remaining = bundle.expiresAtMillis - now
-                if (remaining > 0) Text(countdown(remaining), fontFamily = Mono, fontSize = 11.sp, color = Muted)
+                if (remaining > 0) Text("ENDS IN ${countdown(remaining).uppercase()}", fontFamily = Mono, fontSize = 11.sp, color = Muted)
             }
         }
     }
