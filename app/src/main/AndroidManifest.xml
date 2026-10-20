@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Store alerts for wishlisted skins; asked for when the first skin goes on the wishlist. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Installing app updates downloaded from the app's GitHub releases; Android asks the user each time. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Session tokens and Riot cookies live in app storage; keep them off backups and device transfers. -->
     <application
@@ -26,6 +28,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_paths" />
+        </provider>
 
         <receiver
             android:name=".widget.StoreWidgetReceiver"

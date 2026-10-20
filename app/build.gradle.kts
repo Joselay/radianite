@@ -37,7 +37,8 @@ android {
         minSdk = 28
         targetSdk = 36
         versionCode = commitCount
-        versionName = "0.1.0 ($commit)"
+        // Release tags are "v" and the version code, so the installed label and the update offered read the same.
+        versionName = "$commitCount ($commit)"
     }
 
     buildTypes {

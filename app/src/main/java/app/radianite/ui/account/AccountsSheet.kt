@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -48,6 +49,7 @@ import app.radianite.ui.theme.Ink
 import app.radianite.ui.theme.InkRaised
 import app.radianite.ui.theme.Muted
 import app.radianite.ui.theme.ValorantRed
+import app.radianite.ui.update.LocalAvailableUpdate
 import coil3.compose.AsyncImage
 
 /**
@@ -93,6 +95,12 @@ fun AccountsSheet(
                 SheetAction(R.drawable.ic_add, "Add another account") {
                     onDismiss()
                     onAddAccount()
+                }
+                LocalAvailableUpdate.current?.let { update ->
+                    SheetAction(R.drawable.ic_update, "Update to ${update.title}", tint = ValorantRed) {
+                        onDismiss()
+                        update.open()
+                    }
                 }
             }
             if (shown != null) {
@@ -165,7 +173,7 @@ private fun AccountRow(riotId: String, cardId: String?, selected: Boolean, onCli
 }
 
 @Composable
-private fun SheetAction(icon: Int, label: String, onClick: () -> Unit) {
+private fun SheetAction(icon: Int, label: String, tint: Color = Muted, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -175,7 +183,7 @@ private fun SheetAction(icon: Int, label: String, onClick: () -> Unit) {
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            Icon(painterResource(icon), contentDescription = null, tint = Muted)
+            Icon(painterResource(icon), contentDescription = null, tint = tint)
         }
         Spacer(Modifier.width(12.dp))
         Text(label)

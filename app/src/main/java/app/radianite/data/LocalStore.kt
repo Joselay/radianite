@@ -9,6 +9,7 @@ import app.radianite.data.store.DailyStore
 import app.radianite.data.store.FeaturedBundle
 import app.radianite.data.store.StoreSkin
 import app.radianite.data.store.Wallet
+import app.radianite.data.update.UpdateMarks
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
@@ -48,6 +49,9 @@ object Slots {
     /** Stores already alerted about, so each one notifies once. */
     val storeAlerts = Slot("store_alerts.json", ListSerializer(String.serializer()), Lifetime.DEVICE)
 
+    /** App updates already put off or notified about. */
+    val updateMarks = Slot("update_marks.json", UpdateMarks.serializer(), Lifetime.DEVICE)
+
     // Kept across sign-outs for the signed-out welcome screen.
     val featuredBundles = Slot("featured_bundles.json", ListSerializer(FeaturedBundle.serializer()), Lifetime.DEVICE)
 
@@ -58,7 +62,7 @@ object Slots {
     /** One compact file per match; matches never change once played. */
     val matches = Shelf("matches", MatchRecord.serializer(), Lifetime.ACCOUNT, capacity = 200)
 
-    internal val all: List<Slot<*>> = listOf(session, cookies, dailyStore, wallet, accounts, wishlist, storeAlerts, featuredBundles, skinCatalog, gameContent)
+    internal val all: List<Slot<*>> = listOf(session, cookies, dailyStore, wallet, accounts, wishlist, storeAlerts, updateMarks, featuredBundles, skinCatalog, gameContent)
     internal val shelves: List<Shelf<*>> = listOf(matches)
 }
 

@@ -35,7 +35,9 @@ import app.radianite.data.riot.RiotPlayerData
 import app.radianite.data.riot.RiotSignIn
 import app.radianite.data.store.StoreRepository
 import app.radianite.data.store.Wishlist
+import app.radianite.data.update.AppUpdates
 import app.radianite.sync.StoreSync
+import app.radianite.update.UpdateCheck
 import app.radianite.widget.StoreWidget
 import coil3.ImageLoader
 import coil3.PlatformContext
@@ -67,6 +69,7 @@ class RadianiteApp : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         container = AppContainer(this)
         StoreSync.createChannel(this)
+        UpdateCheck.createChannel(this)
         container.startBackgroundWork()
     }
 
@@ -116,6 +119,14 @@ class AppContainer(context: Context) {
 
     val wishlist: Wishlist by lazy { Wishlist(device) }
 
+    /** New builds from the app's GitHub releases; null in debug builds, which are a separate app. */
+    val updates: AppUpdates? by lazy {
+        if (BuildConfig.DEBUG) null else AppUpdates(http.newBuilder().cache(null).build(), json, device, File(appContext.cacheDir, "updates"), BuildConfig.VERSION_CODE)
+    }
+
+    /** Hands a downloaded update to Android's installer. */
+    fun install(apk: File) = UpdateCheck.install(appContext, apk)
+
     /** One signed-in account's Riot connection and the data modules over it. */
     inner class AccountData(puuid: String) {
         private val local = device.forAccount(puuid)
@@ -138,10 +149,11 @@ class AppContainer(context: Context) {
     }
 
     /**
-     * Keeps the background store sync scheduled while any account is signed in, and redraws the widget
-     * whenever the shown account changes.
+     * Checks for app updates daily, keeps the background store sync scheduled while any account is signed in,
+     * and redraws the widget whenever the shown account changes.
      */
     fun startBackgroundWork() {
+        if (updates != null) UpdateCheck.schedule(appContext)
         appScope.launch {
             account.ready()
             account.saved.map { it.isNotEmpty() }.distinctUntilChanged().collect { signedIn ->
