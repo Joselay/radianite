@@ -26,7 +26,7 @@ Domain language for Radianite. Module names in code follow these terms.
 
 **Best comp**: the one comp that wins most on a map in Radiant ranked games, from vstats.gg, in `team_comps.json` (`CompGuide`, one `MapGuide` per map). Each map takes the newest act with at least 5,000 Radiant team games on it, since early in an act few players have reached Radiant. Only comps at least 1 in 100 of those teams played, and at least 100 times, count; of those, the best has the highest win rate at the low end of its 95% confidence interval, so a lucky streak over a few games can't top it. `scripts/best_comps.py` writes the file. `BestComp`.
 
-**Map play**: how a map has gone in the player's own competitive, unrated and Premier games on the phone: their record and the agents they played. `MapPlay`.
+**Map play**: how a map has gone in the player's own competitive games on the phone: their record and the agents they played. `MapPlay`.
 
 **Collection**: the player's equipped loadout, owned skins and owned agents, with each skin's store price and the collection's total **value** in VP.
 

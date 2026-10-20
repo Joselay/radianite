@@ -95,7 +95,7 @@ fun MapsScreen(viewModel: MapsViewModel, onOpenAccounts: () -> Unit, onOpenMap: 
                     }
                     item(key = "footer") {
                         Text(
-                            "${guide.rankFilter} ranked games from ${guide.sourceName}, updated ${readableDate(guide.updated)}. Your record counts competitive, unrated and Premier games on this phone.",
+                            "${guide.rankFilter} ranked games from ${guide.sourceName}, updated ${readableDate(guide.updated)}. Your record counts your competitive games on this phone.",
                             color = Muted,
                             fontSize = 11.sp,
                             modifier = Modifier.padding(vertical = 8.dp),

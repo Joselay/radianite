@@ -1,6 +1,8 @@
 package app.radianite.data.match
 
-/** How a map has gone in the player's games: their record, and the agents they played there. */
+import app.radianite.data.player.COMPETITIVE_QUEUE
+
+/** How a map has gone in the player's competitive games: their record, and the agents they played there. */
 data class MapPlay(
     /** Lowercase map path, as matches report it. */
     val mapId: String,
@@ -19,13 +21,10 @@ data class AgentResult(val agentId: String, val picks: Int, val wins: Int) {
 /** Rounded to the nearest percent: 2 of 3 is 67%. */
 private fun percent(part: Int, whole: Int) = if (whole > 0) (part * 200 + whole) / (whole * 2) else 0
 
-/** Queues where both teams pick agents to win the map: competitive, unrated and Premier. */
-val DRAFT_QUEUES = setOf("competitive", "unrated", "premier")
-
-/** Each map's play across [summaries], keyed by lowercase map path; only [DRAFT_QUEUES] games count. */
+/** Each map's play across [summaries], keyed by lowercase map path; only competitive games count, as the best comps do. */
 fun mapPlay(summaries: List<MatchSummary>): Map<String, MapPlay> =
     summaries
-        .filter { it.record.queueId in DRAFT_QUEUES && it.record.isTeamMode }
+        .filter { it.record.queueId == COMPETITIVE_QUEUE }
         .groupBy { it.record.mapId.lowercase() }
         .mapValues { (mapId, games) ->
             MapPlay(

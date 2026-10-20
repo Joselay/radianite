@@ -144,14 +144,15 @@ class MatchRecordTest {
     }
 
     @Test
-    fun `map play counts your record and agents, in draft queues only`() {
+    fun `map play counts your record and agents in competitive games only`() {
         val win = record().summaryFor("me")!!
         val loss = record(teamMatch.replace("\"matchId\": \"m1\"", "\"matchId\": \"m2\""))
             .let { it.copy(teams = it.teams.map { t -> t.copy(won = t.teamId == "Red") }) }
             .summaryFor("me")!!
-        val swiftplay = win.copy(record = win.record.copy(matchId = "m3", queueId = "swiftplay"))
+        val unrated = win.copy(record = win.record.copy(matchId = "m3", queueId = "unrated"))
+        val premier = win.copy(record = win.record.copy(matchId = "m4", queueId = "premier"))
 
-        val ascent = mapPlay(listOf(win, loss, swiftplay)).getValue("/game/maps/ascent/ascent")
+        val ascent = mapPlay(listOf(win, loss, unrated, premier)).getValue("/game/maps/ascent/ascent")
         assertEquals(2, ascent.matches)
         assertEquals(1, ascent.wins)
         assertEquals(listOf(AgentResult("agent-jett", picks = 2, wins = 1)), ascent.mine)

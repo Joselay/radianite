@@ -123,7 +123,7 @@ fun MapDetailScreen(map: MapGuide, guide: CompGuide, play: MapPlay?, onBack: () 
             if (play == null) {
                 item(key = "yours-empty") {
                     Text(
-                        "None of your competitive, unrated or Premier games on ${map.map} are on this phone yet. They're added as you open the app after playing.",
+                        "None of your competitive games on ${map.map} are on this phone yet. They're added as you open the app after playing.",
                         color = Muted,
                         style = MaterialTheme.typography.bodyMedium,
                     )
