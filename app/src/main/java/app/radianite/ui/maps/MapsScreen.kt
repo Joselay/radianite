@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.radianite.data.comps.MapGuide
-import app.radianite.data.match.MapPlay
 import app.radianite.ui.common.AccountsButton
 import app.radianite.ui.common.LocalGameContent
 import app.radianite.ui.common.MessageBanner
@@ -44,19 +43,17 @@ import app.radianite.ui.common.SectionHeader
 import app.radianite.ui.common.WinGreen
 import app.radianite.ui.common.Skeleton
 import app.radianite.ui.theme.Display
-import app.radianite.ui.theme.Ink
 import app.radianite.ui.theme.InkRaised
 import app.radianite.ui.theme.Mono
 import app.radianite.ui.theme.Muted
 import coil3.compose.AsyncImage
 import kotlin.math.roundToInt
 
-/** Every map with the comp that wins most on it in Radiant ranked games, and the player's record there; the ranked pool first. */
+/** Every map with the comp that wins most on it in Radiant ranked games; the ranked pool first. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapsScreen(viewModel: MapsViewModel, onOpenAccounts: () -> Unit, onOpenMap: (MapGuide) -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val content = LocalGameContent.current
     val guide = state.guide
     Scaffold(
         topBar = {
@@ -84,18 +81,17 @@ fun MapsScreen(viewModel: MapsViewModel, onOpenAccounts: () -> Unit, onOpenMap: 
                     items(3, key = { "skeleton-$it" }) { Skeleton(Modifier.fillMaxWidth().height(MAP_CARD_HEIGHT)) }
                 } else {
                     val (pool, retired) = guide.maps.partition { it.inPool }
-                    fun play(map: MapGuide) = content?.mapPathNamed(map.map)?.let { state.play[it] }
                     item(key = "legend") {
                         Text("The comp that wins the most on each map in ${guide.rankFilter} ranked games.", color = Muted, fontSize = 13.sp)
                     }
-                    items(pool, key = { it.map }) { MapCard(it, play(it), onClick = { onOpenMap(it) }) }
+                    items(pool, key = { it.map }) { MapCard(it, onClick = { onOpenMap(it) }) }
                     if (retired.isNotEmpty()) {
                         item(key = "retired-header") { SectionHeader("NOT IN RANKED RIGHT NOW") }
-                        items(retired, key = { it.map }) { MapCard(it, play(it), onClick = { onOpenMap(it) }) }
+                        items(retired, key = { it.map }) { MapCard(it, onClick = { onOpenMap(it) }) }
                     }
                     item(key = "footer") {
                         Text(
-                            "${guide.rankFilter} ranked games from ${guide.sourceName}, updated ${readableDate(guide.updated)}. Your record counts your competitive games on this phone.",
+                            "${guide.rankFilter} ranked games from ${guide.sourceName}, updated ${readableDate(guide.updated)}.",
                             color = Muted,
                             fontSize = 11.sp,
                             modifier = Modifier.padding(vertical = 8.dp),
@@ -107,9 +103,9 @@ fun MapsScreen(viewModel: MapsViewModel, onOpenAccounts: () -> Unit, onOpenMap: 
     }
 }
 
-/** The map's art and name with the player's record, over its best comp and how often that comp won. Opens the map's page. */
+/** The map's art and name over its best comp and how often that comp won. Opens the map's page. */
 @Composable
-private fun MapCard(map: MapGuide, play: MapPlay?, onClick: () -> Unit) {
+private fun MapCard(map: MapGuide, onClick: () -> Unit) {
     val content = LocalGameContent.current
     val art = content?.mapPathNamed(map.map)?.let { content.map(it) }?.splash
     Column(
@@ -134,19 +130,6 @@ private fun MapCard(map: MapGuide, play: MapPlay?, onClick: () -> Unit) {
                     .align(Alignment.BottomStart)
                     .padding(horizontal = 14.dp),
             )
-            play?.let {
-                Text(
-                    "YOU ${it.wins}W ${it.matches - it.wins}L",
-                    fontFamily = Mono,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(10.dp)
-                        .background(Ink.copy(alpha = 0.75f), RoundedCornerShape(50))
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                )
-            }
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,

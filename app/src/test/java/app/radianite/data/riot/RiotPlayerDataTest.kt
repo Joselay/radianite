@@ -42,7 +42,7 @@ class RiotPlayerDataTest {
         assertEquals("new", renewed.accessToken)
         assertEquals("ent-2", renewed.entitlementsToken)
         // Region and shard carry over without another geo lookup.
-        assertEquals("latam", renewed.affinity)
+        assertEquals("latam", renewed.region)
         assertEquals("na", renewed.shard)
         assertEquals(0, app.servers.count("riot-geo"))
         assertEquals("new", app.local.read(Slots.session)!!.accessToken)
@@ -122,8 +122,8 @@ class RiotPlayerDataTest {
 
         repeat(3) { assertEquals(429, (runCatching { app.riot.wallet() }.exceptionOrNull() as RiotHttpException).status) }
         assertEquals("only the first call reaches Riot", 1, app.servers.count("/store/v1/wallet/"))
-        assertTrue("other endpoints wait too", runCatching { app.riot.accountXp() }.exceptionOrNull().let { it is RiotHttpException && it.status == 429 })
-        assertEquals(0, app.servers.count("/account-xp/"))
+        assertTrue("other endpoints wait too", runCatching { app.riot.playerLoadout() }.exceptionOrNull().let { it is RiotHttpException && it.status == 429 })
+        assertEquals(0, app.servers.count("/playerloadout"))
 
         app.servers.on("/store/v1/wallet/") { Reply(body = """{"Balances":{}}""") }
         app.now += 121_000

@@ -28,7 +28,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -47,22 +46,12 @@ import app.radianite.AppContainer
 import app.radianite.R
 import app.radianite.data.account.SavedAccount
 import app.radianite.data.comps.MapGuide
-import app.radianite.data.match.MatchSummary
-import app.radianite.data.player.EquippedWeapon
 import app.radianite.data.store.StoreBundle
 import app.radianite.data.store.StoreSkin
 import app.radianite.ui.AppUiState
 import app.radianite.ui.account.AccountsSheet
 import app.radianite.ui.bundle.BundleDetailScreen
 import app.radianite.ui.bundle.BundleDetailViewModel
-import app.radianite.ui.career.CareerScreen
-import app.radianite.ui.career.CareerViewModel
-import app.radianite.ui.career.LeaderboardScreen
-import app.radianite.ui.career.LeaderboardViewModel
-import app.radianite.ui.collection.CollectionScreen
-import app.radianite.ui.collection.CollectionViewModel
-import app.radianite.ui.collection.UpgradesScreen
-import app.radianite.ui.collection.WeaponSkinsScreen
 import app.radianite.ui.common.LoadingPane
 import app.radianite.ui.common.LocalAccountCard
 import app.radianite.ui.common.LocalGameContent
@@ -70,9 +59,6 @@ import app.radianite.ui.common.rememberMotionEnabled
 import app.radianite.ui.maps.MapDetailScreen
 import app.radianite.ui.maps.MapsScreen
 import app.radianite.ui.maps.MapsViewModel
-import app.radianite.ui.matches.MatchDetailScreen
-import app.radianite.ui.matches.MatchesScreen
-import app.radianite.ui.matches.MatchesViewModel
 import app.radianite.ui.skin.SkinDetailScreen
 import app.radianite.ui.skin.SkinDetailViewModel
 import app.radianite.ui.store.StoreScreen
@@ -86,10 +72,7 @@ import kotlinx.coroutines.launch
 
 private enum class Tab(val label: String, @DrawableRes val icon: Int) {
     STORE("Store", R.drawable.ic_tab_store),
-    MATCHES("Matches", R.drawable.ic_tab_matches),
     MAPS("Maps", R.drawable.ic_tab_maps),
-    CAREER("Career", R.drawable.ic_tab_career),
-    COLLECTION("Collection", R.drawable.ic_tab_collection),
 }
 
 /** Screens that open over the tabs, stacked; each has its own back handling. */
@@ -101,10 +84,6 @@ private sealed interface Overlay {
         override val key get() = "skin-${skin.skinUuid}"
     }
 
-    data class Match(val matchId: String) : Overlay {
-        override val key get() = "match-$matchId"
-    }
-
     data class Bundle(val bundle: StoreBundle) : Overlay {
         override val key get() = "bundle-${bundle.uuid ?: bundle.name}"
     }
@@ -113,20 +92,8 @@ private sealed interface Overlay {
         override val key get() = "map-${map.map}"
     }
 
-    data object Leaderboard : Overlay {
-        override val key get() = "leaderboard"
-    }
-
     data object Wishlist : Overlay {
         override val key get() = "wishlist"
-    }
-
-    data class Weapon(val weapon: EquippedWeapon) : Overlay {
-        override val key get() = "weapon-${weapon.weaponId}"
-    }
-
-    data object Upgrades : Overlay {
-        override val key get() = "upgrades"
     }
 }
 
@@ -155,7 +122,7 @@ fun HomeScreen(
     var showAccounts by rememberSaveable { mutableStateOf(false) }
     val card = accounts.find { it.puuid == state.puuid }?.cardId
     CompositionLocalProvider(LocalGameContent provides content, LocalAccountCard provides card) {
-        SignedInTabs(container, state, accounts, onOpenAccounts = { showAccounts = true })
+        SignedInTabs(container, state, onOpenAccounts = { showAccounts = true })
     }
     if (showAccounts) {
         AccountsSheet(
@@ -170,7 +137,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, accounts: List<SavedAccount>, onOpenAccounts: () -> Unit) {
+private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, onOpenAccounts: () -> Unit) {
     val account = state.puuid
     val data = container.accountData(account)
     var tab by rememberSaveable { mutableStateOf(Tab.STORE) }
@@ -235,28 +202,10 @@ private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, ac
                             onOpenBundle = { open(Overlay.Bundle(it)) },
                             onOpenWishlist = { open(Overlay.Wishlist) },
                         )
-                        Tab.MATCHES -> MatchesScreen(
-                            riotId = state.riotId,
-                            viewModel = viewModel(key = "matches-$account") { MatchesViewModel(data.matches) },
-                            onOpenAccounts = onOpenAccounts,
-                            onOpenMatch = { open(Overlay.Match(it.record.matchId)) },
-                        )
                         Tab.MAPS -> MapsScreen(
-                            viewModel = viewModel(key = "maps-$account") { MapsViewModel(container.teamComps, data.matches) },
+                            viewModel = viewModel(key = "maps-$account") { MapsViewModel(container.teamComps) },
                             onOpenAccounts = onOpenAccounts,
                             onOpenMap = { open(Overlay.MapPage(it)) },
-                        )
-                        Tab.CAREER -> CareerScreen(
-                            viewModel = viewModel(key = "career-$account") { CareerViewModel(data.players, data.matches) },
-                            onOpenLeaderboard = { open(Overlay.Leaderboard) },
-                            onOpenAccounts = onOpenAccounts,
-                        )
-                        Tab.COLLECTION -> CollectionScreen(
-                            viewModel = viewModel(key = "collection-$account") { CollectionViewModel(data.players) },
-                            onOpenAccounts = onOpenAccounts,
-                            onOpenSkin = { open(Overlay.Skin(it)) },
-                            onOpenWeapon = { open(Overlay.Weapon(it)) },
-                            onOpenUpgrades = { open(Overlay.Upgrades) },
                         )
                     }
                 }
@@ -278,29 +227,12 @@ private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, ac
                         val skinUuid = checkNotNull(top.skin.skinUuid)
                         SkinDetailScreen(
                             skin = top.skin,
-                            viewModel = viewModel(key = "skin-$account-$skinUuid") {
-                                SkinDetailViewModel(container.content, skinUuid, upgrades = { data.players.skinUpgrades(skinUuid) })
-                            },
+                            viewModel = viewModel(key = "skin-$skinUuid") { SkinDetailViewModel(container.content, skinUuid) },
                             newPlayer = container::newVideoPlayer,
                             wishlisted = wishlist.any { it.skinUuid == skinUuid },
                             onToggleWishlist = { scope.launch { container.wishlist.toggle(top.skin) } },
                             onBack = ::back,
                         )
-                    }
-                    is Overlay.Match -> {
-                        val match by produceState<MatchLookup>(MatchLookup.Loading, top.matchId) {
-                            value = orNull { data.matches.summary(top.matchId) }?.let(MatchLookup::Found) ?: MatchLookup.Missing
-                        }
-                        when (val m = match) {
-                            MatchLookup.Loading -> LoadingPane()
-                            is MatchLookup.Found -> MatchDetailScreen(
-                                m.summary,
-                                knownRiotIds = remember(accounts) { accounts.filter { '#' in it.riotId }.associate { it.puuid to it.riotId } },
-                                onBack = ::back,
-                            )
-                            // Sign-out or a cleared cache dropped the match; fall back to what's underneath.
-                            MatchLookup.Missing -> LaunchedEffect(top) { back() }
-                        }
                     }
                     is Overlay.Bundle -> BundleDetailScreen(
                         bundle = top.bundle,
@@ -310,35 +242,17 @@ private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, ac
                         onBack = ::back,
                     )
                     is Overlay.MapPage -> {
-                        // Shares the Maps tab's view model, so the page shows the same guide and games as the card it came from.
-                        val mapsViewModel = viewModel(key = "maps-$account") { MapsViewModel(container.teamComps, data.matches) }
+                        // Shares the Maps tab's view model, so the page shows the same guide as the card it came from.
+                        val mapsViewModel = viewModel(key = "maps-$account") { MapsViewModel(container.teamComps) }
                         val maps by mapsViewModel.state.collectAsStateWithLifecycle()
-                        val content = LocalGameContent.current
                         val guide = maps.guide
                         val map = guide?.maps?.find { it.map == top.map.map } ?: top.map
                         if (guide == null) LoadingPane() else MapDetailScreen(
                             map = map,
                             guide = guide,
-                            play = content?.mapPathNamed(map.map)?.let { maps.play[it] },
                             onBack = ::back,
                         )
                     }
-                    Overlay.Leaderboard -> LeaderboardScreen(
-                        viewModel = viewModel(key = "leaderboard-$account") { LeaderboardViewModel(data.players) },
-                        onBack = ::back,
-                    )
-                    // Both share the Collection tab's view model, so they open on what the tab already loaded.
-                    is Overlay.Weapon -> WeaponSkinsScreen(
-                        weapon = top.weapon,
-                        viewModel = viewModel(key = "collection-$account") { CollectionViewModel(data.players) },
-                        onOpenSkin = { if (it.skinUuid != null) open(Overlay.Skin(it)) },
-                        onBack = ::back,
-                    )
-                    Overlay.Upgrades -> UpgradesScreen(
-                        viewModel = viewModel(key = "collection-$account") { CollectionViewModel(data.players) },
-                        onOpenSkin = { if (it.skinUuid != null) open(Overlay.Skin(it)) },
-                        onBack = ::back,
-                    )
                     Overlay.Wishlist -> {
                         val store by viewModel(key = "store-$account") { StoreViewModel(data.store) }.state.collectAsStateWithLifecycle()
                         val inStoreNow = remember(store.store) {
@@ -373,12 +287,6 @@ private fun overlayTransition(forward: Boolean, motion: Boolean): ContentTransfo
 
 private const val OVERLAY_MILLIS = 260
 private const val CONTENT_RETRY_MILLIS = 30_000L
-
-private sealed interface MatchLookup {
-    data object Loading : MatchLookup
-    data class Found(val summary: MatchSummary) : MatchLookup
-    data object Missing : MatchLookup
-}
 
 /** For loads a screen can do without: any failure but cancellation reads as null. */
 private suspend fun <T> orNull(block: suspend () -> T): T? = try {

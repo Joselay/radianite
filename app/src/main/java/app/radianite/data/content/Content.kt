@@ -51,25 +51,7 @@ class Content(
         coroutineScope {
             val agents = async { api.get("agents?isPlayableCharacter=true", ListSerializer(ApiAgent.serializer())) }
             val maps = async { api.get("maps", ListSerializer(ApiMap.serializer())) }
-            val tiers = async { api.get("competitivetiers", ListSerializer(ApiTierTable.serializer())) }
-            val seasons = async { api.get("seasons", ListSerializer(ApiSeason.serializer())) }
-            val queues = async { api.get("gamemodes/queues", ListSerializer(ApiQueue.serializer())) }
-            val weapons = async { api.get("weapons", ListSerializer(ApiWeapon.serializer())) }
-            val titles = async { api.get("playertitles", ListSerializer(ApiTitle.serializer())) }
-            val contracts = async { api.get("contracts", ListSerializer(ApiContract.serializer())) }
-            withContext(Dispatchers.Default) {
-                buildGameContent(
-                    version,
-                    agents.await(),
-                    maps.await(),
-                    tiers.await(),
-                    seasons.await(),
-                    queues.await(),
-                    weapons.await(),
-                    titles.await(),
-                    contracts.await(),
-                )
-            }
+            buildGameContent(version, agents.await(), maps.await())
         }
     }
 
@@ -81,7 +63,7 @@ class Content(
 
     private val _game = MutableStateFlow<GameContent?>(null)
 
-    /** The newest game content loaded so far, for screens that name agents, maps and ranks. */
+    /** The newest game content loaded so far, for screens that name agents and maps. */
     val game: StateFlow<GameContent?> = _game.asStateFlow()
 
     /** Current Riot client version; it changes once per patch, so it's reused for a while. */
@@ -96,7 +78,7 @@ class Content(
         return current.also { version = it to clock() }
     }
 
-    /** Agents, maps, ranks, acts, queues, weapons, titles and battle passes. */
+    /** Agents and maps. */
     suspend fun gameContent(): GameContent = gameIndex.get(version()).also { _game.value = it }
 
     /** Skins, rarity tiers and bundles. */

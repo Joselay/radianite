@@ -103,7 +103,7 @@ class Fixture(dir: File) {
 
     init {
         servers.json("valorant-api.com/v1/version", """{"data":{"riotClientVersion":"release-13.08"}}""")
-        for (index in listOf("contenttiers", "bundles", "agents", "maps", "competitivetiers", "seasons", "gamemodes/queues", "weapons", "playertitles", "contracts")) {
+        for (index in listOf("weapons", "contenttiers", "bundles", "agents", "maps")) {
             servers.json("valorant-api.com/v1/$index", """{"data":[]}""")
         }
         servers.on("auth.riotgames.com/authorize") {

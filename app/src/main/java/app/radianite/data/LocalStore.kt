@@ -4,7 +4,6 @@ import app.radianite.data.account.AccountIndex
 import app.radianite.data.comps.CompGuide
 import app.radianite.data.content.Catalog
 import app.radianite.data.content.GameContent
-import app.radianite.data.match.MatchRecord
 import app.radianite.data.riot.RiotSession
 import app.radianite.data.store.DailyStore
 import app.radianite.data.store.FeaturedBundle
@@ -30,9 +29,6 @@ enum class Lifetime { ACCOUNT, DEVICE }
 
 /** One JSON file in the [LocalStore]. */
 class Slot<T>(val fileName: String, val serializer: KSerializer<T>, val lifetime: Lifetime)
-
-/** A directory of JSON files keyed by ID, trimmed to the [capacity] most recently written. */
-class Shelf<T>(val dirName: String, val serializer: KSerializer<T>, val lifetime: Lifetime, val capacity: Int)
 
 /** Everything the app keeps on disk, and how long each piece lives. */
 object Slots {
@@ -63,11 +59,10 @@ object Slots {
     val skinCatalog = Slot("skin_catalog.json", Catalog.serializer(), Lifetime.DEVICE)
     val gameContent = Slot("game_content.json", GameContent.serializer(), Lifetime.DEVICE)
 
-    /** One compact file per match; matches never change once played. */
-    val matches = Shelf("matches", MatchRecord.serializer(), Lifetime.ACCOUNT, capacity = 200)
-
     internal val all: List<Slot<*>> = listOf(session, cookies, dailyStore, wallet, accounts, wishlist, storeAlerts, updateMarks, teamComps, featuredBundles, skinCatalog, gameContent)
-    internal val shelves: List<Shelf<*>> = listOf(matches)
+
+    /** What older builds kept in an account's store and nothing reads any more: the match cache. */
+    internal val retired: List<String> = listOf("matches")
 }
 
 /** Small JSON files in app-private storage (excluded from backups). Writes are atomic; unreadable files read as null. */
@@ -78,24 +73,16 @@ class LocalStore(private val dir: File, private val json: Json) {
 
     suspend fun delete(slot: Slot<*>) = withContext(Dispatchers.IO) { File(dir, slot.fileName).delete() }
 
-    suspend fun <T> read(shelf: Shelf<T>, key: String): T? = read(shelfFile(shelf, key), shelf.serializer)
-
-    /** Everything on [shelf], in no particular order; unreadable files are left out. */
-    suspend fun <T> readAll(shelf: Shelf<T>): List<T> {
-        val files = withContext(Dispatchers.IO) { File(dir, shelf.dirName).listFiles { f -> f.name.endsWith(".json") }.orEmpty() }
-        return files.mapNotNull { read(it, shelf.serializer) }
-    }
-
-    suspend fun <T> write(shelf: Shelf<T>, key: String, value: T) {
-        write(shelfFile(shelf, key), shelf.serializer, value)
-        prune(shelf)
-    }
-
-    /** The store for one account's [Lifetime.ACCOUNT] slots and shelves. */
+    /** The store for one account's [Lifetime.ACCOUNT] slots. */
     fun forAccount(puuid: String) = LocalStore(File(File(dir, ACCOUNTS_DIR), puuid), json)
 
     /** Deletes everything in this store; for an account's store, when it signs out. */
     suspend fun clear() = withContext(Dispatchers.IO) { dir.deleteRecursively() }
+
+    /** Deletes what older builds kept here that nothing reads any more ([Slots.retired]). */
+    suspend fun deleteRetired() = withContext(Dispatchers.IO) {
+        Slots.retired.forEach { File(dir, it).deleteRecursively() }
+    }
 
     /**
      * Moves account data that builds before multi-account support kept in the app's store into the
@@ -106,8 +93,7 @@ class LocalStore(private val dir: File, private val json: Json) {
         val target = forAccount(session.puuid).dir
         withContext(Dispatchers.IO) {
             target.mkdirs()
-            val names = Slots.all.filter { it.lifetime == Lifetime.ACCOUNT }.map { it.fileName } +
-                Slots.shelves.filter { it.lifetime == Lifetime.ACCOUNT }.map { it.dirName }
+            val names = Slots.all.filter { it.lifetime == Lifetime.ACCOUNT }.map { it.fileName }
             // The session moves last: it's what marks the migration as still to do.
             for (name in names.sortedBy { it == Slots.session.fileName }) {
                 val from = File(dir, name)
@@ -124,8 +110,6 @@ class LocalStore(private val dir: File, private val json: Json) {
         const val ACCOUNTS_DIR = "accounts"
     }
 
-    private fun shelfFile(shelf: Shelf<*>, key: String) = File(File(dir, shelf.dirName), "$key.json")
-
     private suspend fun <T> read(file: File, serializer: KSerializer<T>): T? = withContext(Dispatchers.IO) {
         if (!file.exists()) null else runCatching { json.decodeFromString(serializer, file.readText()) }.getOrNull()
     }
@@ -136,10 +120,5 @@ class LocalStore(private val dir: File, private val json: Json) {
         tmp.writeText(json.encodeToString(serializer, value))
         Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         Unit
-    }
-
-    private suspend fun prune(shelf: Shelf<*>) = withContext(Dispatchers.IO) {
-        val files = File(dir, shelf.dirName).listFiles()?.takeIf { it.size > shelf.capacity } ?: return@withContext
-        files.sortedByDescending { it.lastModified() }.drop(shelf.capacity).forEach { it.delete() }
     }
 }

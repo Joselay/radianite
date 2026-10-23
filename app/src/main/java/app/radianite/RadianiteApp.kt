@@ -28,8 +28,6 @@ import app.radianite.data.account.AccountState
 import app.radianite.data.account.SignInCookies
 import app.radianite.data.comps.TeamComps
 import app.radianite.data.content.Content
-import app.radianite.data.match.MatchHistory
-import app.radianite.data.player.PlayerRepository
 import app.radianite.data.riot.AccountCookies
 import app.radianite.data.riot.RiotAuth
 import app.radianite.data.riot.RiotPlayerData
@@ -152,20 +150,17 @@ class AppContainer(context: Context) {
         )
 
         val store = StoreRepository(riot, content, local, device, onRefreshed = { StoreWidget.refresh(appContext) })
-
-        val matches = MatchHistory(riot, local)
-
-        val players = PlayerRepository(riot, content, matches)
     }
 
     /**
      * Checks for app updates daily, keeps the background store sync scheduled while any account is signed in,
-     * and redraws the widget whenever the shown account changes.
+     * and redraws the widget whenever the shown account changes. Clears out what older builds kept and nothing reads.
      */
     fun startBackgroundWork() {
         if (updates != null) UpdateCheck.schedule(appContext)
         appScope.launch {
             account.ready()
+            account.saved.value.forEach { device.forAccount(it.puuid).deleteRetired() }
             account.saved.map { it.isNotEmpty() }.distinctUntilChanged().collect { signedIn ->
                 if (signedIn) StoreSync.schedule(appContext) else StoreSync.cancel(appContext)
             }

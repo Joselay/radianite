@@ -19,10 +19,6 @@ data class RiotSession(
 ) {
     val riotId: String
         get() = if (gameName != null && tagLine != null) "$gameName#$tagLine" else "Signed in"
-
-    /** Region for glz hosts and leaderboards; falls back to the shard for sessions saved without one. */
-    val affinity: String
-        get() = region?.lowercase() ?: shard
 }
 
 @Serializable

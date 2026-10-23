@@ -1,74 +1,37 @@
 package app.radianite.data.content
 
 import kotlinx.serialization.Serializable
-import java.time.Instant
 
-/** Names and art for the IDs the pd endpoints return, indexed from valorant-api.com. */
+/** Names and art for the agents and maps the team comps guide refers to, indexed from valorant-api.com. */
 @Serializable
 data class GameContent(
     val version: String,
     val agents: Map<String, AgentInfo>,
-    /** Keyed by lowercase map path, e.g. "/game/maps/ascent/ascent", which is what matches report. */
+    /** Keyed by lowercase map path, e.g. "/game/maps/ascent/ascent". */
     val maps: Map<String, MapInfo>,
-    val ranks: Map<Int, RankInfo>,
-    val acts: List<ActInfo>,
-    val queues: Map<String, String>,
-    val weapons: Map<String, WeaponInfo>,
-    val titles: Map<String, String>,
-    /** Battle pass contracts keyed by contract UUID. */
-    val battlePasses: Map<String, BattlePassInfo>,
 ) {
     fun agent(uuid: String?): AgentInfo? = uuid?.let { agents[it.lowercase()] }
     fun map(path: String?): MapInfo? = path?.let { maps[it.lowercase()] }
-    fun rank(tier: Int): RankInfo? = ranks[tier]
-    fun act(uuid: String?): ActInfo? = uuid?.let { id -> acts.find { it.uuid == id.lowercase() } }
-    fun queueName(queueId: String): String = queues[queueId] ?: if (queueId.isEmpty()) "Custom" else queueId.replaceFirstChar { it.uppercase() }
 
     /** The UUID of the agent the game calls [name], as the team comps guide names agents. */
     fun agentIdNamed(name: String): String? = agents.entries.find { it.value.name.equals(name, ignoreCase = true) }?.key
 
-    /** The path of the map the game calls [name], which is how matches refer to it. */
+    /** The path of the map the game calls [name]. */
     fun mapPathNamed(name: String): String? = maps.entries.find { it.value.name.equals(name, ignoreCase = true) }?.key
-
-    /** The act running at [nowMillis], if valorant-api.com knows about it yet. */
-    fun currentAct(nowMillis: Long): ActInfo? = acts.find { nowMillis in it.startMillis until it.endMillis }
 }
 
 @Serializable
-data class AgentInfo(
-    val name: String,
-    val icon: String?,
-    val portrait: String?,
-    val role: String?,
-    /** Free starter agents; every account has them, and they never appear as entitlements. */
-    val isBaseContent: Boolean = false,
-)
+data class AgentInfo(val name: String, val icon: String?, val role: String?)
 
 @Serializable
-data class MapInfo(val name: String, val splash: String?, val listIcon: String?)
-
-/** [color] is RRGGBBAA hex. */
-@Serializable
-data class RankInfo(val name: String, val color: String, val icon: String?)
-
-@Serializable
-data class ActInfo(val uuid: String, val name: String, val startMillis: Long, val endMillis: Long)
-
-@Serializable
-data class WeaponInfo(val name: String, val category: String, val icon: String?)
-
-/** [levelXp] is the XP each level needs, in order, epilogue included. */
-@Serializable
-data class BattlePassInfo(val name: String, val actUuid: String, val levelXp: List<Int>)
+data class MapInfo(val name: String, val splash: String?)
 
 @Serializable
 data class ApiAgent(
     val uuid: String,
     val displayName: String,
     val displayIcon: String? = null,
-    val fullPortrait: String? = null,
     val role: ApiAgentRole? = null,
-    val isBaseContent: Boolean = false,
 )
 
 @Serializable
@@ -80,96 +43,14 @@ data class ApiMap(
     val displayName: String,
     val mapUrl: String? = null,
     val splash: String? = null,
-    val listViewIcon: String? = null,
 )
 
-@Serializable
-data class ApiTierTable(val uuid: String, val tiers: List<ApiTier> = emptyList())
-
-@Serializable
-data class ApiTier(val tier: Int, val tierName: String, val color: String? = null, val smallIcon: String? = null)
-
-@Serializable
-data class ApiSeason(
-    val uuid: String,
-    val displayName: String,
-    val type: String? = null,
-    val startTime: String? = null,
-    val endTime: String? = null,
-    val parentUuid: String? = null,
+fun buildGameContent(version: String, agents: List<ApiAgent>, maps: List<ApiMap>) = GameContent(
+    version = version,
+    agents = agents.associate { it.uuid.lowercase() to AgentInfo(it.displayName, it.displayIcon, it.role?.displayName) },
+    // Menus and test ranges have no map path; nothing refers to them.
+    maps = maps.mapNotNull { map -> map.mapUrl?.let { it.lowercase() to MapInfo(map.displayName, map.splash) } }.toMap(),
 )
-
-@Serializable
-data class ApiQueue(val queueId: String, val displayName: String)
-
-@Serializable
-data class ApiWeapon(val uuid: String, val displayName: String, val category: String = "", val displayIcon: String? = null)
-
-@Serializable
-data class ApiTitle(val uuid: String, val titleText: String? = null)
-
-@Serializable
-data class ApiContract(val uuid: String, val displayName: String, val content: ApiContractContent)
-
-@Serializable
-data class ApiContractContent(
-    val relationType: String? = null,
-    val relationUuid: String? = null,
-    val chapters: List<ApiContractChapter> = emptyList(),
-)
-
-@Serializable
-data class ApiContractChapter(val levels: List<ApiContractLevel> = emptyList())
-
-@Serializable
-data class ApiContractLevel(val xp: Int = 0)
-
-fun buildGameContent(
-    version: String,
-    agents: List<ApiAgent>,
-    maps: List<ApiMap>,
-    tierTables: List<ApiTierTable>,
-    seasons: List<ApiSeason>,
-    queues: List<ApiQueue>,
-    weapons: List<ApiWeapon>,
-    titles: List<ApiTitle>,
-    contracts: List<ApiContract>,
-): GameContent {
-    val episodes = seasons.filter { it.parentUuid == null }.associate { it.uuid.lowercase() to it.displayName }
-    return GameContent(
-        version = version,
-        agents = agents.associate {
-            it.uuid.lowercase() to AgentInfo(it.displayName, it.displayIcon, it.fullPortrait, it.role?.displayName, it.isBaseContent)
-        },
-        maps = maps.mapNotNull { map ->
-            map.mapUrl?.let { it.lowercase() to MapInfo(map.displayName, map.splash, map.listViewIcon) }
-        }.toMap(),
-        // The newest table applies to current matches; older episodes' tiers line up with it.
-        ranks = tierTables.lastOrNull()?.tiers.orEmpty()
-            .filterNot { it.tierName.startsWith("Unused") }
-            .associate { it.tier to RankInfo(it.tierName, it.color ?: "ffffffff", it.smallIcon) },
-        acts = seasons.filter { it.type == "EAresSeasonType::Act" }.mapNotNull { act ->
-            val start = act.startTime?.let(::parseInstant) ?: return@mapNotNull null
-            val end = act.endTime?.let(::parseInstant) ?: return@mapNotNull null
-            val episode = act.parentUuid?.let { episodes[it.lowercase()] }
-            ActInfo(act.uuid.lowercase(), listOfNotNull(episode, act.displayName).joinToString(" · "), start, end)
-        },
-        queues = queues.filterNot { it.queueId.startsWith("console_") }.associate { it.queueId to it.displayName },
-        weapons = weapons.associate {
-            it.uuid.lowercase() to WeaponInfo(it.displayName, it.category.substringAfterLast("::"), it.displayIcon)
-        },
-        titles = titles.mapNotNull { t -> t.titleText?.takeIf { it.isNotBlank() }?.let { t.uuid.lowercase() to it } }.toMap(),
-        battlePasses = contracts.filter { it.content.relationType == "Season" && it.content.relationUuid != null }.associate { contract ->
-            contract.uuid.lowercase() to BattlePassInfo(
-                name = contract.displayName,
-                actUuid = contract.content.relationUuid!!.lowercase(),
-                levelXp = contract.content.chapters.flatMap { chapter -> chapter.levels.map { it.xp } },
-            )
-        },
-    )
-}
-
-private fun parseInstant(iso: String): Long? = runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull()
 
 /** Player card art follows a fixed CDN path, so it needs no lookup. */
 object CardArt {

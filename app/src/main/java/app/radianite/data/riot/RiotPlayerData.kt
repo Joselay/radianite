@@ -11,7 +11,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.json.Json
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
@@ -34,11 +33,9 @@ interface RiotCookies {
 /** The Riot session is gone and the user has to sign in again. */
 class SessionExpiredException : Exception("Your Riot session expired. Sign in again.")
 
-/** ItemTypeIDs for [RiotPlayerData.ownedItems]. */
+/** ItemTypeIDs of the things a store offer or bundle can hold. */
 object ItemTypes {
-    const val AGENTS = "01bb38e1-da47-4e6a-9b3d-945fe4655707"
     const val SKIN_LEVELS = "e7c63390-eda7-46e0-bb7a-a6abdacd2433"
-    const val SKIN_CHROMAS = "3ad1b2b2-acdb-4524-852f-954a76ddae0a"
     const val BUDDY_LEVELS = "dd3bf334-87f3-40bd-b043-682a57a8dc3a"
     const val SPRAYS = "d5f120f8-ff8c-4aac-92ea-f2b5acbe9475"
     const val PLAYER_CARDS = "3f296c07-64c3-494c-923b-fe692a4fa1bd"
@@ -46,7 +43,9 @@ object ItemTypes {
 }
 
 /**
- * One signed-in account's VALORANT player data. Callers ask for the thing they want; this module finds a
+ * One signed-in account's VALORANT player data, and only what the app shows: the storefront, the wallet and the
+ * equipped player card. Every endpoint more is one more way to look unlike the game client, so add none lightly.
+ * Callers ask for the thing they want; this module finds a
  * valid session, picks the shard and region hosts, sends the game client's headers, renews rejected tokens
  * once (shared by every call that hit the same rejection), and reports a session that can't be renewed as
  * [SessionExpiredException], also announced on [expired].
@@ -118,52 +117,9 @@ class RiotPlayerData(
     suspend fun wallet(): WalletResponse =
         call(WalletResponse.serializer()) { pd(it, "store/v1/wallet/${it.puuid}") }
 
-    /** [itemTypeId] is one of the [ItemTypes] constants. */
-    suspend fun ownedItems(itemTypeId: String): OwnedItemsResponse =
-        call(OwnedItemsResponse.serializer()) { pd(it, "store/v1/entitlements/${it.puuid}/$itemTypeId") }
-
-    /** What every skin level and chroma bought with Radianite costs; not per account, and the same all patch. */
-    suspend fun itemUpgrades(): ItemUpgradesResponse =
-        call(ItemUpgradesResponse.serializer()) { pd(it, "contract-definitions/v3/item-upgrades") }
-
-    /** Newest first, only [queue]'s matches when it's set (e.g. "competitive"). Riot caps a page at 20 matches. */
-    suspend fun matchHistory(startIndex: Int, count: Int, queue: String? = null): MatchHistoryResponse =
-        call(MatchHistoryResponse.serializer()) {
-            pd(it, "match-history/v1/history/${it.puuid}?startIndex=$startIndex&endIndex=${startIndex + count}" + (queue?.let { q -> "&queue=$q" } ?: ""))
-        }
-
-    suspend fun matchDetails(matchId: String): MatchDetailsResponse =
-        call(MatchDetailsResponse.serializer()) { pd(it, "match-details/v1/matches/$matchId") }
-
-    suspend fun playerMmr(): PlayerMmrResponse =
-        call(PlayerMmrResponse.serializer()) { pd(it, "mmr/v1/players/${it.puuid}") }
-
-    /** The newest [count] competitive games' ranked rating changes. */
-    suspend fun competitiveUpdates(count: Int): CompetitiveUpdatesResponse =
-        call(CompetitiveUpdatesResponse.serializer()) {
-            pd(it, "mmr/v1/players/${it.puuid}/competitiveupdates?startIndex=0&endIndex=$count&queue=competitive")
-        }
-
-    suspend fun accountXp(): AccountXpResponse =
-        call(AccountXpResponse.serializer()) { pd(it, "account-xp/v1/players/${it.puuid}") }
-
+    /** The equipped loadout; the app reads only the player card from it, to picture the account. */
     suspend fun playerLoadout(): PlayerLoadoutResponse =
         call(PlayerLoadoutResponse.serializer()) { pd(it, "personalization/v3/players/${it.puuid}/playerloadout") }
-
-    suspend fun contracts(): ContractsResponse =
-        call(ContractsResponse.serializer()) { pd(it, "contracts/v1/contracts/${it.puuid}") }
-
-    /** The player's region's competitive leaderboard for the act [seasonId]. */
-    suspend fun leaderboard(seasonId: String, startIndex: Int, size: Int, query: String?): LeaderboardResponse =
-        call(LeaderboardResponse.serializer()) {
-            pd(it, "mmr/v1/leaderboards/affinity/${it.affinity}/queue/competitive/season/$seasonId")
-                .toHttpUrl().newBuilder()
-                .addQueryParameter("startIndex", startIndex.toString())
-                .addQueryParameter("size", size.toString())
-                .apply { if (!query.isNullOrBlank()) addQueryParameter("query", query) }
-                .build()
-                .toString()
-        }
 
     /** One pd request with a valid session, renewing the tokens once if Riot rejects them. */
     private suspend fun <T> call(
@@ -236,7 +192,7 @@ class RiotPlayerData(
 
     /**
      * Once Riot rate-limits a call, every call fails fast without the network until the wait it asked for
-     * is over: carrying on, e.g. with the live-match poll, would look like a misbehaving client.
+     * is over: carrying on would look like a misbehaving client.
      */
     private suspend fun <T> execute(request: Request, deserializer: DeserializationStrategy<T>): T {
         val wait = coolingDownUntil - clock()
