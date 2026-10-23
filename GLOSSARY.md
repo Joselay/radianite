@@ -10,6 +10,8 @@ Domain language for Radianite. Module names in code follow these terms.
 
 **Featured bundle**: a bundle on sale in the store. The welcome screen shows the ones the last store fetch saw, kept across sign-outs. `StoreBundle` (in the store), `FeaturedBundle` (welcome screen). Its **contents** are its skins, with their variants, and the buddies, sprays, player cards and titles that come with them, each with its price in the bundle and on its own: `BundleContents`.
 
+**Accessory Store**: the weekly offers of buddies, sprays, player cards and titles sold for Kingdom Credits, part of the same storefront as the Daily Store. `AccessoryOffer`.
+
 **Wallet**: the account's VP, Radianite Points and Kingdom Credits balances.
 
 **Skin**: a weapon skin as the app shows it, at one of its levels: `StoreSkin`. Riot's store and loadout refer to skin *levels*; the catalog maps a level back to its skin.

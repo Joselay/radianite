@@ -2,6 +2,8 @@ package app.radianite.data.store
 
 import app.radianite.data.Fixture
 import app.radianite.data.Reply
+import app.radianite.data.content.CosmeticKind
+import app.radianite.data.riot.ItemTypes
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -49,6 +51,38 @@ class StoreRepositoryTest {
 
         app.now += 3600 * 1000
         assertNull("rotated", store.cached())
+    }
+
+    @Test
+    fun `the Accessory Store's offers are named, priced in Kingdom Credits and end with its rotation`() = runTest {
+        val app = Fixture(tmp.root).apply { signIn() }
+        val store = app.store()
+        app.servers.json(
+            "/store/v3/storefront/",
+            """
+            {"AccessoryStore": {"AccessoryStoreRemainingDurationInSeconds": 86400,
+              "AccessoryStoreOffers": [
+                {"Offer": {"OfferID": "o-1", "Cost": {"$KINGDOM_CREDITS_UUID": 4000},
+                           "Rewards": [{"ItemTypeID": "D5F120F8-FF8C-4AAC-92EA-F2B5ACBE9475", "ItemID": "SPRAY-1", "Quantity": 1}]}},
+                {"Offer": {"OfferID": "o-2", "Cost": {"$KINGDOM_CREDITS_UUID": 2000},
+                           "Rewards": [{"ItemTypeID": "unknown-type", "ItemID": "thing"}]}},
+                {"Offer": {"OfferID": "o-3", "Cost": {"$KINGDOM_CREDITS_UUID": 3000},
+                           "Rewards": [{"ItemTypeID": "${ItemTypes.TITLES}", "ItemID": "title-1"}]}}]}}
+            """.trimIndent(),
+        )
+        app.servers.json("valorant-api.com/v1/sprays/spray-1", """{"data":{"displayName":"Nice Spray","fullTransparentIcon":"spray.png"}}""")
+        app.servers.on("valorant-api.com/v1/playertitles/") { Reply(500) }
+
+        val fresh = store.refresh().store
+
+        assertEquals(
+            listOf(
+                AccessoryOffer(CosmeticKind.SPRAY, "spray-1", "Nice Spray", "spray.png", amount = 1, priceKc = 4000),
+                AccessoryOffer(CosmeticKind.TITLE, "title-1", "", null, amount = 1, priceKc = 3000),
+            ),
+            fresh.accessories,
+        )
+        assertEquals(app.now + 86400 * 1000, fresh.accessoriesExpiresAtMillis)
     }
 
     @Test

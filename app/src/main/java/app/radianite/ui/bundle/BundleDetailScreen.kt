@@ -51,7 +51,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.radianite.R
-import app.radianite.data.content.CosmeticKind
 import app.radianite.data.store.BundleExtra
 import app.radianite.data.store.BundleSkin
 import app.radianite.data.store.StoreBundle
@@ -61,6 +60,7 @@ import app.radianite.ui.common.BackButton
 import app.radianite.ui.common.SectionHeader
 import app.radianite.ui.common.Skeleton
 import app.radianite.ui.common.countdown
+import app.radianite.ui.common.label
 import app.radianite.ui.common.rememberNow
 import app.radianite.ui.theme.Display
 import app.radianite.ui.theme.Ink
@@ -319,13 +319,6 @@ private fun Prices(priceVp: Int?, basePriceVp: Int?, color: Color) {
             else -> Amount(priceVp, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = color)
         }
     }
-}
-
-private fun CosmeticKind.label() = when (this) {
-    CosmeticKind.BUDDY -> "Gun buddy"
-    CosmeticKind.SPRAY -> "Spray"
-    CosmeticKind.PLAYER_CARD -> "Player card"
-    CosmeticKind.TITLE -> "Title"
 }
 
 private const val MAX_SWATCHES = 6

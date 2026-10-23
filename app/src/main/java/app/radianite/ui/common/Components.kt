@@ -62,6 +62,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import app.radianite.R
 import app.radianite.data.content.CardArt
+import app.radianite.data.content.CosmeticKind
 import app.radianite.data.content.GameContent
 import app.radianite.data.match.Outcome
 import app.radianite.ui.theme.Display
@@ -338,6 +339,14 @@ fun plural(count: Int, one: String, many: String) = "$count ${if (count == 1) on
 fun signed(value: Int): String = if (value > 0) "+$value" else value.toString()
 
 /** VALORANT's currencies. Their icons ship with the app, so amounts draw at once, with no download. */
+/** What a buddy, spray, card or title is called in the game. */
+fun CosmeticKind.label() = when (this) {
+    CosmeticKind.BUDDY -> "Gun buddy"
+    CosmeticKind.SPRAY -> "Spray"
+    CosmeticKind.PLAYER_CARD -> "Player card"
+    CosmeticKind.TITLE -> "Title"
+}
+
 enum class Currency(@DrawableRes val icon: Int, val spokenName: String) {
     VALORANT_POINTS(R.drawable.ic_currency_vp, "VALORANT Points"),
     RADIANITE_POINTS(R.drawable.ic_currency_rp, "Radianite Points"),

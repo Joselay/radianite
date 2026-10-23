@@ -11,7 +11,7 @@ import kotlinx.coroutines.coroutineScope
 /** The Daily Store with the wallet beside it; [wallet] is null when Riot didn't return it. */
 data class StoreSnapshot(val store: DailyStore, val wallet: Wallet?)
 
-/** One account's Daily Store, Night Market, featured bundles and wallet. */
+/** One account's Daily Store, Night Market, featured bundles, Accessory Store and wallet. */
 class StoreRepository(
     private val riot: RiotPlayerData,
     private val content: Content,
@@ -38,10 +38,11 @@ class StoreRepository(
         val catalog = async { content.catalog() }
         val wallet = async { optional("Wallet") { riot.wallet().toWallet() } }
         val front = riot.storefront()
+        val accessories = async { content.accessoryOffers(front.accessoryStore) }
         val puuid = riot.puuid()
         val cat = catalog.await()
         front.featuredBundles(cat).takeIf { it.isNotEmpty() }?.let { device.write(Slots.featuredBundles, it) }
-        val store = front.toDailyStore(puuid, cat, clock()).also { local.write(Slots.dailyStore, it) }
+        val store = front.toDailyStore(puuid, cat, clock(), accessories.await()).also { local.write(Slots.dailyStore, it) }
         val snapshot = StoreSnapshot(store, wallet.await()?.also { local.write(Slots.wallet, it) })
         onRefreshed(snapshot)
         snapshot

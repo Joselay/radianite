@@ -59,7 +59,8 @@ suspend fun Content.bundleContents(bundle: StoreBundle): BundleContents = corout
     )
 }
 
-private fun cosmeticKind(itemTypeId: String) = when (itemTypeId) {
+/** What a bundle or Accessory Store item of [itemTypeId] is, or null when it isn't a buddy, spray, card or title. */
+internal fun cosmeticKind(itemTypeId: String) = when (itemTypeId) {
     ItemTypes.BUDDY_LEVELS -> CosmeticKind.BUDDY
     ItemTypes.SPRAYS -> CosmeticKind.SPRAY
     ItemTypes.PLAYER_CARDS -> CosmeticKind.PLAYER_CARD

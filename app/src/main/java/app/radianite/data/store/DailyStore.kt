@@ -19,6 +19,9 @@ data class DailyStore(
     val bundles: List<StoreBundle> = emptyList(),
     val nightMarket: List<NightMarketOffer> = emptyList(),
     val nightMarketExpiresAtMillis: Long? = null,
+    /** The weekly Accessory Store, bought with Kingdom Credits. */
+    val accessories: List<AccessoryOffer> = emptyList(),
+    val accessoriesExpiresAtMillis: Long? = null,
 )
 
 @Serializable
@@ -78,7 +81,8 @@ data class StoreSkin(
     val tierIconUrl: String?,
 )
 
-fun StorefrontResponse.toDailyStore(puuid: String, catalog: Catalog, nowMillis: Long): DailyStore {
+/** [accessories] are the Accessory Store's offers, already named; see [accessoryOffers]. */
+fun StorefrontResponse.toDailyStore(puuid: String, catalog: Catalog, nowMillis: Long, accessories: List<AccessoryOffer> = emptyList()): DailyStore {
     val panel = skinsPanel
     return DailyStore(
         puuid = puuid,
@@ -114,6 +118,8 @@ fun StorefrontResponse.toDailyStore(puuid: String, catalog: Catalog, nowMillis: 
             )
         },
         nightMarketExpiresAtMillis = bonusStore?.let { nowMillis + it.remainingSeconds * 1000 },
+        accessories = accessories,
+        accessoriesExpiresAtMillis = accessoryStore?.let { nowMillis + it.remainingSeconds * 1000 },
     )
 }
 

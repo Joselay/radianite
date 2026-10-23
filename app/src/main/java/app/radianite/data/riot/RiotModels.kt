@@ -60,6 +60,19 @@ data class StorefrontResponse(
     @SerialName("FeaturedBundle") val featuredBundle: FeaturedBundleLayout? = null,
     /** The Night Market; only present while one is running. */
     @SerialName("BonusStore") val bonusStore: BonusStore? = null,
+    /** The weekly buddies, sprays, player cards and titles sold for Kingdom Credits. */
+    @SerialName("AccessoryStore") val accessoryStore: AccessoryStore? = null,
+)
+
+@Serializable
+data class AccessoryStore(
+    @SerialName("AccessoryStoreOffers") val offers: List<AccessoryStoreOffer> = emptyList(),
+    @SerialName("AccessoryStoreRemainingDurationInSeconds") val remainingSeconds: Long = 0,
+)
+
+@Serializable
+data class AccessoryStoreOffer(
+    @SerialName("Offer") val offer: StoreOffer,
 )
 
 @Serializable
@@ -131,6 +144,7 @@ data class StoreOffer(
 data class StoreReward(
     @SerialName("ItemTypeID") val itemTypeId: String,
     @SerialName("ItemID") val itemId: String,
+    @SerialName("Quantity") val quantity: Int = 1,
 )
 
 class RiotHttpException(

@@ -58,6 +58,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import app.radianite.R
+import app.radianite.data.store.AccessoryOffer
 import app.radianite.data.store.StoreBundle
 import app.radianite.data.store.StoreSkin
 import app.radianite.data.store.Wallet
@@ -69,6 +70,7 @@ import app.radianite.ui.common.MessageBanner
 import app.radianite.ui.common.SectionHeader
 import app.radianite.ui.common.Skeleton
 import app.radianite.ui.common.countdown
+import app.radianite.ui.common.label
 import app.radianite.ui.common.plural
 import app.radianite.ui.common.rememberNow
 import app.radianite.ui.theme.Display
@@ -162,6 +164,12 @@ fun StoreScreen(
                     if (store.bundles.isNotEmpty()) {
                         fullWidth("bundles-header") { SectionHeader("FEATURED BUNDLES") }
                         store.bundles.forEach { bundle -> fullWidth("bundle-" + bundle.name + bundle.expiresAtMillis) { BundleCard(bundle, onClick = { onOpenBundle(bundle) }) } }
+                    }
+                    store.accessoriesExpiresAtMillis?.takeIf { store.accessories.isNotEmpty() }?.let { endsAt ->
+                        fullWidth("accessories-header") { TimedHeader("ACCESSORY STORE", endsAt) }
+                        store.accessories.forEach { offer ->
+                            fullWidth("accessory-" + offer.itemId) { AccessoryRow(offer, kingdomCredits = state.wallet?.kingdomCredits) }
+                        }
                     }
                 } else if (state.refreshing) {
                     items(DAILY_OFFERS, key = { "skeleton-$it" }) { Skeleton(Modifier.fillMaxWidth().height(skinCardHeight())) }
@@ -290,6 +298,47 @@ private fun BundleCard(bundle: StoreBundle, onClick: () -> Unit) {
                 val remaining = bundle.expiresAtMillis - now
                 if (remaining > 0) Text("ENDS IN ${countdown(remaining).uppercase()}", fontFamily = Mono, fontSize = 11.sp, color = Muted)
             }
+        }
+    }
+}
+
+/** One Accessory Store offer; the price dims when the wallet's Kingdom Credits can't cover it. */
+@Composable
+private fun AccessoryRow(offer: AccessoryOffer, kingdomCredits: Int?) {
+    val affordable = offer.priceKc == null || kingdomCredits == null || kingdomCredits >= offer.priceKc
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(InkRaised)
+            .padding(12.dp),
+    ) {
+        Box(
+            Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Ink),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (offer.imageUrl != null) {
+                AsyncImage(model = offer.imageUrl, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(4.dp))
+            } else {
+                Text("T", fontFamily = Display, fontSize = 20.sp, color = Muted)
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(offer.kind.label().uppercase(), fontFamily = Mono, fontSize = 10.sp, color = Muted, letterSpacing = 1.sp)
+            Text(
+                offer.name.ifEmpty { offer.kind.label() } + if (offer.amount > 1) " ×${offer.amount}" else "",
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        offer.priceKc?.let {
+            Amount(it, currency = Currency.KINGDOM_CREDITS, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = if (affordable) Color.Unspecified else Muted)
         }
     }
 }
