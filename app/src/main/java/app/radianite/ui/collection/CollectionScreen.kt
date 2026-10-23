@@ -49,6 +49,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import app.radianite.data.player.EquippedWeapon
+import app.radianite.data.player.OwnedSkin
 import app.radianite.data.player.PlayerCollection
 import app.radianite.data.player.PlayerRepository
 import app.radianite.data.player.SkinSort
@@ -153,6 +154,19 @@ fun CollectionScreen(viewModel: CollectionViewModel, onOpenAccounts: () -> Unit,
                             StatTile("VALUE", collection.valueVp?.let { "%,d".format(it) } ?: "–", Modifier.weight(1.3f), currency = Currency.VALORANT_POINTS.takeIf { collection.valueVp != null })
                         }
                     }
+                    collection.radianiteToMax?.let { toMax ->
+                        item(key = "radianite", span = { GridItemSpan(maxLineSpan) }) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                StatTile(
+                                    if (toMax > 0) "TO MAX ${collection.skinsToUpgrade} ${if (collection.skinsToUpgrade == 1) "SKIN" else "SKINS"}" else "ALL SKINS MAXED",
+                                    "%,d".format(toMax),
+                                    Modifier.weight(1f),
+                                    currency = Currency.RADIANITE_POINTS,
+                                )
+                                collection.radianite?.let { StatTile("YOU HAVE", "%,d".format(it), Modifier.weight(1f), currency = Currency.RADIANITE_POINTS) }
+                            }
+                        }
+                    }
                     if (collection.loadout.isNotEmpty()) {
                         item(key = "equipped-header", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("EQUIPPED") }
                         items(collection.loadout, key = { "equipped-" + it.weaponId }) { weapon ->
@@ -185,7 +199,7 @@ fun CollectionScreen(viewModel: CollectionViewModel, onOpenAccounts: () -> Unit,
                             }
                         }
                     }
-                    items(skins, key = { "owned-" + it.levelUuid }) { skin -> SkinTile(skin, onClick = { onOpenSkin(skin) }) }
+                    items(skins, key = { "owned-" + it.skin.levelUuid }) { owned -> SkinTile(owned, onClick = { onOpenSkin(owned.skin) }) }
                     if (skins.isEmpty()) {
                         item(key = "no-skins", span = { GridItemSpan(maxLineSpan) }) {
                             Text(
@@ -230,7 +244,8 @@ private fun EquippedTile(weapon: EquippedWeapon, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SkinTile(skin: StoreSkin, onClick: () -> Unit) {
+private fun SkinTile(owned: OwnedSkin, onClick: () -> Unit) {
+    val skin = owned.skin
     val tierColor = remember(skin.tierColor) { rgbaColor(skin.tierColor)?.copy(alpha = 1f) ?: Muted }
     Column(
         Modifier
@@ -255,7 +270,15 @@ private fun SkinTile(skin: StoreSkin, onClick: () -> Unit) {
             }
             Text(skin.name, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        skin.priceVp?.let { Amount(it, fontFamily = Mono, fontSize = 10.sp, color = Muted, modifier = Modifier.padding(top = 2.dp)) }
+        val toMax = owned.radianiteToMax?.takeIf { it > 0 }
+        if (skin.priceVp != null || toMax != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                skin.priceVp?.let { Amount(it, fontFamily = Mono, fontSize = 10.sp, color = Muted) }
+                Spacer(Modifier.weight(1f))
+                // What's left to unlock, as a nudge to finish the skin.
+                toMax?.let { Amount(it, currency = Currency.RADIANITE_POINTS, prefix = "MAX", fontFamily = Mono, fontSize = 10.sp, color = Muted) }
+            }
+        }
     }
 }
 
@@ -264,6 +287,7 @@ private val SkinSort.label: String
         SkinSort.NAME -> "Name"
         SkinSort.RARITY -> "Rarity"
         SkinSort.PRICE -> "Price"
+        SkinSort.UPGRADES -> "Radianite"
     }
 
 private const val PLACEHOLDER_TILES = 6

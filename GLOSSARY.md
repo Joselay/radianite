@@ -30,6 +30,8 @@ Domain language for Radianite. Module names in code follow these terms.
 
 **Map play**: how a map has gone in the player's own competitive games on the phone: their record and the agents they played. `MapPlay`.
 
+**Radianite upgrade**: a skin level or chroma bought with Radianite Points once the skin is owned (`RadianiteUpgrade`). A skin's first level and first chroma come with it. What a skin's locked upgrades cost is its **Radianite to max**; for one skin with what's unlocked, `SkinUpgrades`.
+
 **Collection**: the player's equipped loadout, owned skins and owned agents, with each skin's store price and the collection's total **value** in VP.
 
 **Wishlist**: skins the user is waiting for, kept for the device rather than an account. A wishlisted skin in any signed-in account's Daily Store or Night Market is **announced** with a notification, once per rotation. `Wishlist`.

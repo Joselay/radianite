@@ -240,3 +240,63 @@ data class LeaderboardPlayer(
     val numberOfWins: Int = 0,
     val competitiveTier: Int = 0,
 )
+
+/** Every skin's Radianite upgrades. Each definition hangs off a skin's first level ([requiredEntitlement]). */
+@Serializable
+data class ItemUpgradesResponse(
+    @SerialName("Definitions") val definitions: List<UpgradeDefinition> = emptyList(),
+)
+
+@Serializable
+data class UpgradeDefinition(
+    @SerialName("RequiredEntitlement") val requiredEntitlement: UpgradeItem,
+    @SerialName("ProgressionSchedule") val progression: ProgressionSchedule = ProgressionSchedule(),
+    @SerialName("RewardSchedule") val rewardSchedule: RewardSchedule = RewardSchedule(),
+    /** The chromas, each bought on its own once the level it needs is owned. */
+    @SerialName("Sidegrades") val sidegrades: List<Sidegrade>? = null,
+)
+
+@Serializable
+data class UpgradeItem(
+    @SerialName("ItemTypeID") val itemTypeId: String = "",
+    @SerialName("ItemID") val itemId: String,
+)
+
+/** What each next level costs, in [currencyId]; the levels themselves are the [RewardSchedule]'s, in step. */
+@Serializable
+data class ProgressionSchedule(
+    @SerialName("ProgressionCurrencyID") val currencyId: String = "",
+    @SerialName("ProgressionDeltaPerLevel") val costPerLevel: List<Int>? = null,
+)
+
+@Serializable
+data class RewardSchedule(
+    @SerialName("RewardsPerLevel") val rewardsPerLevel: List<LevelReward>? = null,
+)
+
+@Serializable
+data class LevelReward(
+    @SerialName("EntitlementRewards") val entitlements: List<UpgradeItem>? = null,
+)
+
+@Serializable
+data class Sidegrade(
+    @SerialName("Options") val options: List<SidegradeOption> = emptyList(),
+)
+
+@Serializable
+data class SidegradeOption(
+    @SerialName("Cost") val cost: SidegradeCost = SidegradeCost(),
+    @SerialName("Rewards") val rewards: List<UpgradeItem> = emptyList(),
+)
+
+@Serializable
+data class SidegradeCost(
+    @SerialName("WalletCosts") val walletCosts: List<WalletCost> = emptyList(),
+)
+
+@Serializable
+data class WalletCost(
+    @SerialName("CurrencyID") val currencyId: String,
+    @SerialName("AmountToDeduct") val amount: Int = 0,
+)

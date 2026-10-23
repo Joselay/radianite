@@ -265,7 +265,9 @@ private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, on
                         val skinUuid = checkNotNull(top.skin.skinUuid)
                         SkinDetailScreen(
                             skin = top.skin,
-                            viewModel = viewModel(key = "skin-$skinUuid") { SkinDetailViewModel(container.content, skinUuid) },
+                            viewModel = viewModel(key = "skin-$account-$skinUuid") {
+                                SkinDetailViewModel(container.content, skinUuid, upgrades = { data.players.skinUpgrades(skinUuid) })
+                            },
                             newPlayer = container::newVideoPlayer,
                             wishlisted = wishlist.any { it.skinUuid == skinUuid },
                             onToggleWishlist = { scope.launch { container.wishlist.toggle(top.skin) } },

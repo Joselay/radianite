@@ -38,6 +38,7 @@ class SessionExpiredException : Exception("Your Riot session expired. Sign in ag
 object ItemTypes {
     const val AGENTS = "01bb38e1-da47-4e6a-9b3d-945fe4655707"
     const val SKIN_LEVELS = "e7c63390-eda7-46e0-bb7a-a6abdacd2433"
+    const val SKIN_CHROMAS = "3ad1b2b2-acdb-4524-852f-954a76ddae0a"
     const val BUDDY_LEVELS = "dd3bf334-87f3-40bd-b043-682a57a8dc3a"
     const val SPRAYS = "d5f120f8-ff8c-4aac-92ea-f2b5acbe9475"
     const val PLAYER_CARDS = "3f296c07-64c3-494c-923b-fe692a4fa1bd"
@@ -124,6 +125,10 @@ class RiotPlayerData(
     /** [itemTypeId] is one of the [ItemTypes] constants. */
     suspend fun ownedItems(itemTypeId: String): OwnedItemsResponse =
         call(OwnedItemsResponse.serializer()) { pd(it, "store/v1/entitlements/${it.puuid}/$itemTypeId") }
+
+    /** What every skin level and chroma bought with Radianite costs; not per account, and the same all patch. */
+    suspend fun itemUpgrades(): ItemUpgradesResponse =
+        call(ItemUpgradesResponse.serializer()) { pd(it, "contract-definitions/v3/item-upgrades") }
 
     /** Newest first, only [queue]'s matches when it's set (e.g. "competitive"). Riot caps a page at 20 matches. */
     suspend fun matchHistory(startIndex: Int, count: Int, queue: String? = null): MatchHistoryResponse =

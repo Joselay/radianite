@@ -131,7 +131,7 @@ class CareerTest {
     fun `collection search matches skin names loosely`() {
         val collection = collectionOf(owned("Reaver Vandal"), owned("Prime Vandal"), owned("Glitchpop Phantom"))
 
-        assertEquals(listOf("Prime Vandal", "Reaver Vandal"), collection.search(" vandal ").map { it.name })
+        assertEquals(listOf("Prime Vandal", "Reaver Vandal"), collection.search(" vandal ").map { it.skin.name })
         assertEquals(3, collection.search("").size)
     }
 
@@ -146,15 +146,15 @@ class CareerTest {
 
         assertEquals(
             listOf("Battle Pass Vandal", "Elderflame Vandal", "Reaver Vandal"),
-            collection.search("", weaponId = "vandal").map { it.name },
+            collection.search("", weaponId = "vandal").map { it.skin.name },
         )
         assertEquals(
             listOf("Elderflame Vandal", "Prime Phantom", "Reaver Vandal", "Battle Pass Vandal"),
-            collection.search("", sort = SkinSort.RARITY).map { it.name },
+            collection.search("", sort = SkinSort.RARITY).map { it.skin.name },
         )
         assertEquals(
             listOf("Elderflame Vandal", "Prime Phantom", "Reaver Vandal", "Battle Pass Vandal"),
-            collection.search("", sort = SkinSort.PRICE).map { it.name },
+            collection.search("", sort = SkinSort.PRICE).map { it.skin.name },
         )
     }
 

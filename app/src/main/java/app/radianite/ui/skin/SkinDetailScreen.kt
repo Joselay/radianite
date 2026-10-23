@@ -53,10 +53,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -67,10 +70,13 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.compose.PlayerSurface
 import app.radianite.R
 import app.radianite.data.content.SkinVariant
+import app.radianite.data.player.SkinUpgrades
 import app.radianite.data.store.StoreSkin
 import app.radianite.ui.common.Amount
 import app.radianite.ui.common.BackButton
+import app.radianite.ui.common.Currency
 import app.radianite.ui.theme.InkRaised
+import app.radianite.ui.theme.Mono
 import app.radianite.ui.theme.Muted
 import app.radianite.ui.theme.ValorantRed
 import app.radianite.ui.theme.rgbaColor
@@ -161,10 +167,13 @@ private fun LoadedDetail(
                 }
             }
 
+            val upgrades = state.upgrades
+            upgrades?.let { item(key = "radianite") { RadianiteSummary(it, accent) } }
+
             if (state.detail.levels.size > 1) {
                 item(key = "levels-header") { SectionHeader("UPGRADES") }
                 items(state.detail.levels, key = { "level-" + it.id }) { level ->
-                    LevelRow(level, selected = level.id == state.selected.id, accent = accent, onClick = { onSelect(level) })
+                    LevelRow(level, selected = level.id == state.selected.id, accent = accent, unlock = upgrades?.unlockOf(level.id), onClick = { onSelect(level) })
                 }
             }
 
@@ -176,7 +185,7 @@ private fun LoadedDetail(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         items(state.detail.chromas, key = { it.id }) { chroma ->
-                            ChromaTile(chroma, selected = chroma.id == state.selected.id, accent = accent, onClick = { onSelect(chroma) })
+                            ChromaTile(chroma, selected = chroma.id == state.selected.id, accent = accent, unlock = upgrades?.unlockOf(chroma.id), onClick = { onSelect(chroma) })
                         }
                     }
                 }
@@ -271,8 +280,62 @@ private fun SectionHeader(text: String) {
     )
 }
 
+/** Where a level or chroma stands: owned, or locked behind [rp] Radianite Points. Null when it comes with the skin. */
+private sealed interface Unlock {
+    data object Owned : Unlock
+    data class Locked(val rp: Int) : Unlock
+}
+
+/** Prices show as locked for a skin the account doesn't own, since its upgrades can't be bought yet either. */
+private fun SkinUpgrades.unlockOf(variantUuid: String): Unlock? {
+    val rp = rp(variantUuid) ?: return null
+    return if (ownsSkin && isUnlocked(variantUuid)) Unlock.Owned else Unlock.Locked(rp)
+}
+
+/** What the skin's upgrades cost all told, or what's left of it for an owned skin. */
 @Composable
-private fun LevelRow(level: SkinVariant, selected: Boolean, accent: Color, onClick: () -> Unit) {
+private fun RadianiteSummary(upgrades: SkinUpgrades, accent: Color) {
+    val remaining = upgrades.remainingRp
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(InkRaised)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Text(
+            when {
+                !upgrades.ownsSkin -> "TO FULLY UPGRADE"
+                remaining > 0 -> "LEFT TO UNLOCK"
+                else -> "FULLY UPGRADED"
+            },
+            fontFamily = Mono,
+            fontSize = 11.sp,
+            letterSpacing = 1.sp,
+            color = Muted,
+            modifier = Modifier.weight(1f),
+        )
+        if (upgrades.ownsSkin && remaining == 0) {
+            Icon(painterResource(R.drawable.ic_check), contentDescription = "Everything unlocked", tint = accent, modifier = Modifier.size(20.dp))
+        } else {
+            Amount(remaining, currency = Currency.RADIANITE_POINTS, fontWeight = FontWeight.Bold, color = accent)
+        }
+    }
+}
+
+/** A tick for an owned upgrade, its price for a locked one. */
+@Composable
+private fun UnlockBadge(unlock: Unlock, accent: Color, fontSize: TextUnit) {
+    when (unlock) {
+        Unlock.Owned -> Icon(painterResource(R.drawable.ic_check), contentDescription = "Unlocked", tint = accent, modifier = Modifier.size(with(LocalDensity.current) { (fontSize * 1.4f).toDp() }))
+        is Unlock.Locked -> Amount(unlock.rp, currency = Currency.RADIANITE_POINTS, fontFamily = Mono, fontSize = fontSize, color = Muted)
+    }
+}
+
+@Composable
+private fun LevelRow(level: SkinVariant, selected: Boolean, accent: Color, unlock: Unlock?, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -285,12 +348,16 @@ private fun LevelRow(level: SkinVariant, selected: Boolean, accent: Color, onCli
     ) {
         Text(level.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(72.dp))
         Text(level.subtitle.orEmpty(), color = if (selected) accent else Muted, modifier = Modifier.weight(1f))
+        unlock?.let {
+            UnlockBadge(it, accent, fontSize = 12.sp)
+            Spacer(Modifier.width(10.dp))
+        }
         if (level.videoUrl != null) Icon(painterResource(R.drawable.ic_play), contentDescription = "Has video", tint = if (selected) accent else Muted, modifier = Modifier.size(20.dp))
     }
 }
 
 @Composable
-private fun ChromaTile(chroma: SkinVariant, selected: Boolean, accent: Color, onClick: () -> Unit) {
+private fun ChromaTile(chroma: SkinVariant, selected: Boolean, accent: Color, unlock: Unlock?, onClick: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -316,6 +383,9 @@ private fun ChromaTile(chroma: SkinVariant, selected: Boolean, accent: Color, on
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        if (chroma.videoUrl != null) Icon(painterResource(R.drawable.ic_play), contentDescription = "Has video", tint = Muted, modifier = Modifier.size(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            unlock?.let { UnlockBadge(it, accent, fontSize = 10.sp) }
+            if (chroma.videoUrl != null) Icon(painterResource(R.drawable.ic_play), contentDescription = "Has video", tint = Muted, modifier = Modifier.size(14.dp))
+        }
     }
 }
