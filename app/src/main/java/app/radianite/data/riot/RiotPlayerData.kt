@@ -118,10 +118,6 @@ class RiotPlayerData(
     suspend fun wallet(): WalletResponse =
         call(WalletResponse.serializer()) { pd(it, "store/v1/wallet/${it.puuid}") }
 
-    /** Everything the store sells and its full price; not per account, but only reachable signed in. */
-    suspend fun offers(): OffersResponse =
-        call(OffersResponse.serializer()) { pd(it, "store/v1/offers/") }
-
     /** [itemTypeId] is one of the [ItemTypes] constants. */
     suspend fun ownedItems(itemTypeId: String): OwnedItemsResponse =
         call(OwnedItemsResponse.serializer()) { pd(it, "store/v1/entitlements/${it.puuid}/$itemTypeId") }

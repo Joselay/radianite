@@ -2,7 +2,6 @@ package app.radianite.data.player
 
 import app.radianite.data.content.Catalog
 import app.radianite.data.content.Content
-import app.radianite.data.content.WeaponInfo
 import app.radianite.data.match.MatchHistory
 import app.radianite.data.match.RankedRatingChange
 import app.radianite.data.match.rrTrend
@@ -11,7 +10,6 @@ import app.radianite.data.riot.ItemTypes
 import app.radianite.data.riot.LeaderboardPlayer
 import app.radianite.data.riot.RiotPlayerData
 import app.radianite.data.store.StoreSkin
-import app.radianite.data.store.VALORANT_POINTS_UUID
 import app.radianite.data.store.storeSkin
 import app.radianite.data.store.toWallet
 import kotlinx.coroutines.async
@@ -38,45 +36,35 @@ data class Career(
 
 data class EquippedWeapon(val weaponId: String, val weaponName: String, val category: String, val skin: StoreSkin?)
 
-/**
- * An owned skin with what the collection filters and sorts by. Its [StoreSkin.priceVp] is its store price, when
- * Riot sells it. [radianiteToMax] is what its locked upgrades cost: 0 when there are none, null when unknown.
- */
+/** An owned skin with the weapon it's for and its rarity. [radianiteToMax] is what its locked upgrades cost: 0 when there are none, null when unknown. */
 data class OwnedSkin(val skin: StoreSkin, val weaponId: String?, val tierRank: Int?, val radianiteToMax: Int? = null)
 
-data class WeaponFilter(val weaponId: String, val name: String)
-
-enum class SkinSort { NAME, RARITY, PRICE, UPGRADES }
-
 data class PlayerCollection(
+    /** Every weapon in loadout order, with the skin equipped on it. */
     val loadout: List<EquippedWeapon>,
     /** One entry per owned skin (not per level), sorted by name. */
     val skins: List<OwnedSkin>,
-    val ownedAgents: Int?,
-    val totalAgents: Int,
-    /** What the owned skins Riot sells would cost in the store; null when prices couldn't be loaded. */
-    val valueVp: Int?,
-    /** Weapons with at least one owned skin, in loadout order. */
-    val weapons: List<WeaponFilter>,
     /** What unlocking every owned skin's levels and chromas would cost; null when Riot didn't say. */
     val radianiteToMax: Int? = null,
-    /** Owned skins with something left to unlock with Radianite. */
-    val skinsToUpgrade: Int = 0,
     /** The wallet's Radianite Points, when it loaded. */
     val radianite: Int? = null,
 ) {
-    /** Owned skins whose name contains [query], for [weaponId] when it's set, in [sort] order. */
-    fun search(query: String, weaponId: String? = null, sort: SkinSort = SkinSort.NAME): List<OwnedSkin> {
+    private val byWeapon: Map<String?, List<OwnedSkin>> by lazy {
+        skins.groupBy { it.weaponId }.mapValues { (_, owned) -> owned.sortedWith(compareByDescending<OwnedSkin> { it.tierRank ?: -1 }.thenBy { it.skin.name }) }
+    }
+
+    /** [weaponId]'s owned skins, rarest first. */
+    fun skinsFor(weaponId: String): List<OwnedSkin> = byWeapon[weaponId].orEmpty()
+
+    /** Owned skins with something left to unlock with Radianite, most to spend first. */
+    val toUpgrade: List<OwnedSkin> by lazy {
+        skins.filter { (it.radianiteToMax ?: 0) > 0 }.sortedWith(compareByDescending<OwnedSkin> { it.radianiteToMax }.thenBy { it.skin.name })
+    }
+
+    /** Owned skins whose name contains [query], by name; none for a blank query. */
+    fun search(query: String): List<OwnedSkin> {
         val q = query.trim()
-        val matching = skins.filter { (weaponId == null || it.weaponId == weaponId) && (q.isEmpty() || it.skin.name.contains(q, ignoreCase = true)) }
-        val sorted = when (sort) {
-            SkinSort.NAME -> matching
-            SkinSort.RARITY -> matching.sortedWith(compareByDescending<OwnedSkin> { it.tierRank ?: -1 }.thenBy { it.skin.name })
-            SkinSort.PRICE -> matching.sortedWith(compareByDescending<OwnedSkin> { it.skin.priceVp ?: -1 }.thenBy { it.skin.name })
-            // Most Radianite left to spend first.
-            SkinSort.UPGRADES -> matching.sortedWith(compareByDescending<OwnedSkin> { it.radianiteToMax ?: -1 }.thenBy { it.skin.name })
-        }
-        return sorted
+        return if (q.isEmpty()) emptyList() else skins.filter { it.skin.name.contains(q, ignoreCase = true) }
     }
 }
 
@@ -150,27 +138,18 @@ class PlayerRepository(
         val catalog = async { content.catalog() }
         val loadout = async { riot.playerLoadout() }
         val skins = async { optional("Owned skins") { riot.ownedItems(ItemTypes.SKIN_LEVELS) } }
-        val agents = async { optional("Owned agents") { riot.ownedItems(ItemTypes.AGENTS) } }
-        val offers = async { optional("Store prices") { riot.offers() } }
         val unlocked = async { optional("Owned chromas") { riot.ownedItems(ItemTypes.SKIN_CHROMAS) } }
         val wallet = async { optional("Wallet") { riot.wallet().toWallet() } }
 
         val c = game.await()
         val cat = catalog.await()
-        val ownedAgentIds = agents.await()?.itemIds
-        // A skin's store price is its first level's offer; higher levels are bought with Radianite.
-        val prices = offers.await()?.offers?.mapNotNull { offer ->
-            val level = offer.rewards.firstOrNull()?.itemId ?: return@mapNotNull null
-            val skin = cat.skinsByLevel[level.lowercase()] ?: return@mapNotNull null
-            offer.cost[VALORANT_POINTS_UUID]?.let { skin.skinUuid to it }
-        }?.toMap()
         val ownedLevels = skins.await()?.itemIds
         val variants = ownedLevels?.let { levels -> unlocked.await()?.itemIds?.let { levels + it } }?.also { unlockedVariants = it }
         val upgrades = variants?.let { optional("Radianite upgrades") { radianiteUpgrades(cat) } }
         val owned = ownedLevels.orEmpty()
             .mapNotNull { level ->
                 val entry = cat.skinsByLevel[level.lowercase()] ?: return@mapNotNull null
-                val skin = cat.storeSkin(level, priceVp = prices?.get(entry.skinUuid)) ?: return@mapNotNull null
+                val skin = cat.storeSkin(level) ?: return@mapNotNull null
                 val toMax = upgrades?.let { it[entry.skinUuid.lowercase()]?.remainingRp(variants) ?: 0 }
                 OwnedSkin(skin, entry.weaponUuid.ifEmpty { null }, entry.tierUuid?.let { cat.tiers[it.lowercase()]?.rank }, toMax)
             }
@@ -187,15 +166,7 @@ class PlayerRepository(
                 )
             }.sortedWith(compareBy<EquippedWeapon> { categoryRank(it.category) }.thenBy { it.weaponName }),
             skins = owned,
-            ownedAgents = ownedAgentIds?.let { owned -> c.agents.count { (uuid, agent) -> agent.isBaseContent || uuid in owned } },
-            totalAgents = c.agents.size,
-            valueVp = prices?.let { owned.sumOf { it.skin.priceVp ?: 0 } },
-            weapons = owned.mapNotNull { it.weaponId }.distinct()
-                .map { id -> c.weapons[id] to id }
-                .sortedWith(compareBy<Pair<WeaponInfo?, String>> { (weapon, _) -> categoryRank(weapon?.category) }.thenBy { (weapon, _) -> weapon?.name })
-                .map { (weapon, id) -> WeaponFilter(id, weapon?.name ?: "Weapon") },
             radianiteToMax = upgrades?.let { owned.sumOf { it.radianiteToMax ?: 0 } },
-            skinsToUpgrade = owned.count { (it.radianiteToMax ?: 0) > 0 },
             radianite = wallet.await()?.radianite,
         )
     }

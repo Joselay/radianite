@@ -5,7 +5,6 @@ import app.radianite.data.Reply
 import app.radianite.data.match.MatchHistory
 import app.radianite.data.riot.ItemTypes
 import app.radianite.data.store.RADIANITE_POINTS_UUID
-import app.radianite.data.store.VALORANT_POINTS_UUID
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -38,42 +37,21 @@ class CollectionTest {
             "/store/v1/entitlements/puuid-1/${ItemTypes.SKIN_LEVELS}",
             """{"Entitlements":[{"ItemID":"reaver-1"},{"ItemID":"reaver-2"},{"ItemID":"pass-1"},{"ItemID":"prime-1"}]}""",
         )
-        servers.json(
-            "/store/v1/offers/",
-            """
-            {"Offers":[
-              {"OfferID":"o1","Cost":{"$VALORANT_POINTS_UUID":1775},"Rewards":[{"ItemTypeID":"x","ItemID":"reaver-1"}]},
-              {"OfferID":"o2","Cost":{"$VALORANT_POINTS_UUID":1275},"Rewards":[{"ItemTypeID":"x","ItemID":"prime-1"}]}
-            ]}
-            """.trimIndent(),
-        )
         return PlayerRepository(riot, content, matches = MatchHistory(riot, local), clock = { now })
     }
 
     @Test
-    fun `owned skins carry their store price, weapon and rarity, and add up to the collection's value`() = runTest {
+    fun `owned skins are grouped by weapon, rarest first, and searchable by name`() = runTest {
         val app = Fixture(tmp.root).apply { signIn(accessToken = "new") }
 
         val collection = app.collection().collection()
 
         assertEquals(listOf("Battle Pass Vandal", "Prime Classic", "Reaver Vandal"), collection.skins.map { it.skin.name })
-        assertEquals(1775, collection.skins.single { it.skin.skinUuid == "reaver" }.skin.priceVp)
-        assertNull(collection.skins.single { it.skin.skinUuid == "pass" }.skin.priceVp)
-        assertEquals(1775 + 1275, collection.valueVp)
-        assertEquals(listOf(WeaponFilter("classic", "Classic"), WeaponFilter("vandal", "Vandal")), collection.weapons)
-        assertEquals(2, collection.skins.single { it.skin.skinUuid == "prime" }.tierRank)
-    }
-
-    @Test
-    fun `without store prices the collection still shows, with no value`() = runTest {
-        val app = Fixture(tmp.root).apply { signIn(accessToken = "new") }
-        val players = app.collection()
-        app.servers.on("/store/v1/offers/") { Reply(500) }
-
-        val collection = players.collection()
-
-        assertEquals(3, collection.skins.size)
-        assertNull(collection.valueVp)
+        assertEquals(listOf("Reaver Vandal", "Battle Pass Vandal"), collection.skinsFor("vandal").map { it.skin.name })
+        assertEquals(listOf("Prime Classic"), collection.skinsFor("classic").map { it.skin.name })
+        assertEquals(emptyList<OwnedSkin>(), collection.skinsFor("odin"))
+        assertEquals(listOf("Battle Pass Vandal", "Reaver Vandal"), collection.search(" vandal ").map { it.skin.name })
+        assertEquals(emptyList<OwnedSkin>(), collection.search(" "))
     }
 
     @Test
@@ -108,9 +86,8 @@ class CollectionTest {
         assertEquals(10 + 15, collection.skins.single { it.skin.skinUuid == "reaver" }.radianiteToMax)
         assertEquals(0, collection.skins.single { it.skin.skinUuid == "prime" }.radianiteToMax)
         assertEquals(25, collection.radianiteToMax)
-        assertEquals(1, collection.skinsToUpgrade)
         assertEquals(20, collection.radianite)
-        assertEquals(listOf("Reaver Vandal", "Battle Pass Vandal", "Prime Classic"), collection.search("", sort = SkinSort.UPGRADES).map { it.skin.name })
+        assertEquals(listOf("Reaver Vandal"), collection.toUpgrade.map { it.skin.name })
 
         val reaver = players.skinUpgrades("reaver")!!
         assertTrue(reaver.ownsSkin)

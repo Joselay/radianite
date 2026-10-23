@@ -1,5 +1,6 @@
 package app.radianite.ui.collection
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,22 +16,25 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,8 +43,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,21 +57,19 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import app.radianite.R
 import app.radianite.data.player.EquippedWeapon
 import app.radianite.data.player.OwnedSkin
 import app.radianite.data.player.PlayerCollection
 import app.radianite.data.player.PlayerRepository
-import app.radianite.data.player.SkinSort
 import app.radianite.data.store.StoreSkin
 import app.radianite.ui.common.AccountsButton
 import app.radianite.ui.common.Amount
 import app.radianite.ui.common.Currency
-import app.radianite.ui.common.HudChip
 import app.radianite.ui.common.MessageBanner
-import app.radianite.ui.common.SectionHeader
 import app.radianite.ui.common.Skeleton
-import app.radianite.ui.common.StatTile
 import app.radianite.ui.common.loadReporting
+import app.radianite.ui.theme.Display
 import app.radianite.ui.theme.InkRaised
 import app.radianite.ui.theme.Mono
 import app.radianite.ui.theme.Muted
@@ -81,6 +88,7 @@ data class CollectionUiState(
     val message: String? = null,
 )
 
+/** Shared by the Collection tab and the pages it opens, so a weapon's skins and the upgrade list need no reload. */
 class CollectionViewModel(private val repository: PlayerRepository) : ViewModel() {
     private val _state = MutableStateFlow(CollectionUiState())
     val state: StateFlow<CollectionUiState> = _state.asStateFlow()
@@ -103,21 +111,47 @@ class CollectionViewModel(private val repository: PlayerRepository) : ViewModel(
     }
 }
 
+/**
+ * The loadout as the game's Collection shows it: every weapon with its equipped skin, each opening the skins
+ * owned for it. A line above sums up the skins and what maxing them would cost; search finds any owned skin.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CollectionScreen(viewModel: CollectionViewModel, onOpenAccounts: () -> Unit, onOpenSkin: (StoreSkin) -> Unit) {
+fun CollectionScreen(
+    viewModel: CollectionViewModel,
+    onOpenAccounts: () -> Unit,
+    onOpenSkin: (StoreSkin) -> Unit,
+    onOpenWeapon: (EquippedWeapon) -> Unit,
+    onOpenUpgrades: () -> Unit,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var query by rememberSaveable { mutableStateOf("") }
-    var weaponId by rememberSaveable { mutableStateOf<String?>(null) }
-    var sort by rememberSaveable { mutableStateOf(SkinSort.NAME) }
+    // Null while not searching; blank while the field is open but empty.
+    var query by rememberSaveable { mutableStateOf<String?>(null) }
     val collection = state.collection
-    val skins = remember(collection, query, weaponId, sort) { collection?.search(query, weaponId, sort).orEmpty() }
+    BackHandler(enabled = query != null) { query = null }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Collection", fontWeight = FontWeight.Bold) },
-                actions = { AccountsButton(onOpenAccounts) },
+                title = {
+                    val q = query
+                    if (q == null) {
+                        Text("Collection", fontWeight = FontWeight.Bold)
+                    } else {
+                        SearchField(q, onChange = { query = it })
+                    }
+                },
+                navigationIcon = {
+                    if (query != null) {
+                        IconButton(onClick = { query = null }) { Icon(painterResource(R.drawable.ic_close), contentDescription = "Close search") }
+                    }
+                },
+                actions = {
+                    if (query == null) {
+                        IconButton(onClick = { query = "" }) { Icon(painterResource(R.drawable.ic_search), contentDescription = "Search skins", tint = Muted) }
+                        AccountsButton(onOpenAccounts)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
@@ -129,89 +163,32 @@ fun CollectionScreen(viewModel: CollectionViewModel, onOpenAccounts: () -> Unit,
                 .padding(padding)
                 .fillMaxSize(),
         ) {
+            val q = query
+            if (q != null && collection != null) {
+                val results = remember(collection, q) { collection.search(q) }
+                OwnedSkinGrid(
+                    skins = results,
+                    onOpenSkin = onOpenSkin,
+                    empty = if (q.isBlank()) "Type a skin's name." else "No owned skins match \"${q.trim()}\".",
+                )
+                return@PullToRefreshBox
+            }
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Fixed(3),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                state.message?.let { item(key = "message", span = { GridItemSpan(maxLineSpan) }) { MessageBanner(it) } }
+                state.message?.let { fullWidth("message") { MessageBanner(it) } }
                 if (collection == null && state.refreshing) {
-                    item(key = "counts-skeleton", span = { GridItemSpan(maxLineSpan) }) { Skeleton(Modifier.fillMaxWidth().height(58.dp), RoundedCornerShape(10.dp)) }
-                    items(PLACEHOLDER_TILES, key = { "skeleton-$it" }) { Skeleton(Modifier.fillMaxWidth().height(110.dp), RoundedCornerShape(10.dp)) }
+                    fullWidth("summary-skeleton") { Skeleton(Modifier.fillMaxWidth().height(64.dp), RoundedCornerShape(10.dp)) }
+                    items(PLACEHOLDER_TILES, key = { "skeleton-$it" }) { Skeleton(Modifier.fillMaxWidth().height(96.dp), RoundedCornerShape(10.dp)) }
                 }
                 if (collection != null) {
-                    item(key = "counts", span = { GridItemSpan(maxLineSpan) }) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            StatTile("SKINS", "${collection.skins.size}", Modifier.weight(1f))
-                            StatTile(
-                                "AGENTS",
-                                collection.ownedAgents?.let { "$it / ${collection.totalAgents}" } ?: "–",
-                                Modifier.weight(1f),
-                            )
-                            // What the skins Riot sells would cost today; battle pass and free skins don't count.
-                            StatTile("VALUE", collection.valueVp?.let { "%,d".format(it) } ?: "–", Modifier.weight(1.3f), currency = Currency.VALORANT_POINTS.takeIf { collection.valueVp != null })
-                        }
-                    }
-                    collection.radianiteToMax?.let { toMax ->
-                        item(key = "radianite", span = { GridItemSpan(maxLineSpan) }) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                StatTile(
-                                    if (toMax > 0) "TO MAX ${collection.skinsToUpgrade} ${if (collection.skinsToUpgrade == 1) "SKIN" else "SKINS"}" else "ALL SKINS MAXED",
-                                    "%,d".format(toMax),
-                                    Modifier.weight(1f),
-                                    currency = Currency.RADIANITE_POINTS,
-                                )
-                                collection.radianite?.let { StatTile("YOU HAVE", "%,d".format(it), Modifier.weight(1f), currency = Currency.RADIANITE_POINTS) }
-                            }
-                        }
-                    }
-                    if (collection.loadout.isNotEmpty()) {
-                        item(key = "equipped-header", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("EQUIPPED") }
-                        items(collection.loadout, key = { "equipped-" + it.weaponId }) { weapon ->
-                            EquippedTile(weapon, onClick = { weapon.skin?.let(onOpenSkin) })
-                        }
-                    }
-                    item(key = "owned-header", span = { GridItemSpan(maxLineSpan) }) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SectionHeader("OWNED SKINS", Modifier.padding(bottom = 0.dp))
-                            OutlinedTextField(
-                                value = query,
-                                onValueChange = { query = it },
-                                placeholder = { Text("Search skins") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            if (collection.weapons.size > 1) {
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    item(key = "all") { HudChip("All weapons", selected = weaponId == null, onClick = { weaponId = null }) }
-                                    items(collection.weapons, key = { it.weaponId }) { weapon ->
-                                        HudChip(weapon.name, selected = weaponId == weapon.weaponId, onClick = { weaponId = weapon.weaponId })
-                                    }
-                                }
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("SORT", fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.sp, color = Muted)
-                                SkinSort.entries.forEach { option ->
-                                    HudChip(option.label, selected = sort == option, onClick = { sort = option })
-                                }
-                            }
-                        }
-                    }
-                    items(skins, key = { "owned-" + it.skin.levelUuid }) { owned -> SkinTile(owned, onClick = { onOpenSkin(owned.skin) }) }
-                    if (skins.isEmpty()) {
-                        item(key = "no-skins", span = { GridItemSpan(maxLineSpan) }) {
-                            Text(
-                                when {
-                                    query.isNotBlank() -> "No owned skins match \"$query\"."
-                                    weaponId != null -> "No skins for this weapon yet."
-                                    else -> "No skins yet."
-                                },
-                                color = Muted,
-                                modifier = Modifier.padding(vertical = 16.dp),
-                            )
-                        }
+                    fullWidth("summary") { Summary(collection, onOpenUpgrades) }
+                    items(collection.loadout, key = { "weapon-" + it.weaponId }) { weapon ->
+                        WeaponTile(weapon, owned = collection.skinsFor(weapon.weaponId).size, onClick = { onOpenWeapon(weapon) })
                     }
                 }
             }
@@ -220,31 +197,112 @@ fun CollectionScreen(viewModel: CollectionViewModel, onOpenAccounts: () -> Unit,
 }
 
 @Composable
-private fun EquippedTile(weapon: EquippedWeapon, onClick: () -> Unit) {
+private fun SearchField(query: String, onChange: (String) -> Unit) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    TextField(
+        value = query,
+        onValueChange = onChange,
+        placeholder = { Text("Search your skins") },
+        singleLine = true,
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = Color.Transparent,
+            unfocusedContainerColor = Color.Transparent,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focus),
+    )
+}
+
+/** How many skins, and what maxing them all would cost against the wallet; opens the skins still to upgrade. */
+@Composable
+private fun Summary(collection: PlayerCollection, onOpenUpgrades: () -> Unit) {
+    val toMax = collection.radianiteToMax
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(InkRaised)
+            .clickable(enabled = (toMax ?: 0) > 0, role = Role.Button, onClickLabel = "See skins to upgrade", onClick = onOpenUpgrades)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Figure("SKINS", Modifier.weight(1f)) { Text("%,d".format(collection.skins.size), fontFamily = Display, fontSize = 22.sp) }
+        if (toMax != null) {
+            Figure(if (toMax > 0) "TO MAX" else "ALL MAXED", Modifier.weight(1f)) {
+                Amount(toMax, currency = Currency.RADIANITE_POINTS, fontFamily = Display, fontSize = 22.sp)
+            }
+            collection.radianite?.let { rp ->
+                Figure("YOU HAVE", Modifier.weight(1f)) { Amount(rp, currency = Currency.RADIANITE_POINTS, fontFamily = Display, fontSize = 22.sp, color = Muted) }
+            }
+            if (toMax > 0) Icon(painterResource(R.drawable.ic_arrow_forward), contentDescription = null, tint = Muted, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun Figure(label: String, modifier: Modifier, value: @Composable () -> Unit) {
+    Column(modifier) {
+        Text(label, fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.sp, color = Muted)
+        value()
+    }
+}
+
+/** One weapon with its equipped skin and how many skins are owned for it. */
+@Composable
+private fun WeaponTile(weapon: EquippedWeapon, owned: Int, onClick: () -> Unit) {
     val skin = weapon.skin
     Column(
         Modifier
             .clip(RoundedCornerShape(10.dp))
             .background(InkRaised)
-            .clickable(enabled = skin?.skinUuid != null, onClick = onClick)
-            .padding(10.dp),
+            .clickable(role = Role.Button, onClickLabel = "See ${weapon.weaponName} skins", onClick = onClick)
+            .padding(8.dp),
     ) {
-        Text(weapon.weaponName.uppercase(), fontFamily = Mono, fontSize = 10.sp, color = Muted)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(weapon.weaponName.uppercase(), fontFamily = Mono, fontSize = 9.sp, color = Muted, maxLines = 1, modifier = Modifier.weight(1f))
+            if (owned > 0) Text("$owned", fontFamily = Mono, fontSize = 9.sp, color = Muted)
+        }
         AsyncImage(
             model = skin?.iconUrl,
-            contentDescription = skin?.name,
+            contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
-                .padding(vertical = 6.dp),
+                .height(40.dp)
+                .padding(vertical = 4.dp),
         )
-        Text(skin?.name ?: "Standard", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(skin?.name ?: "Standard", fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Owned skins two to a row, or [empty] when there are none. [equipped] is the skin UUID to mark as equipped. */
+@Composable
+internal fun OwnedSkinGrid(
+    skins: List<OwnedSkin>,
+    onOpenSkin: (StoreSkin) -> Unit,
+    empty: String,
+    equipped: String? = null,
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        items(skins, key = { "owned-" + it.skin.levelUuid }) { owned ->
+            SkinTile(owned, equipped = equipped != null && owned.skin.skinUuid == equipped, onClick = { onOpenSkin(owned.skin) })
+        }
+        if (skins.isEmpty()) fullWidth("empty") { Text(empty, color = Muted, modifier = Modifier.padding(vertical = 16.dp)) }
     }
 }
 
 @Composable
-private fun SkinTile(owned: OwnedSkin, onClick: () -> Unit) {
+private fun SkinTile(owned: OwnedSkin, equipped: Boolean, onClick: () -> Unit) {
     val skin = owned.skin
     val tierColor = remember(skin.tierColor) { rgbaColor(skin.tierColor)?.copy(alpha = 1f) ?: Muted }
     Column(
@@ -257,10 +315,13 @@ private fun SkinTile(owned: OwnedSkin, onClick: () -> Unit) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .aspectRatio(2f),
+                .aspectRatio(2.4f),
             contentAlignment = Alignment.Center,
         ) {
             AsyncImage(model = skin.iconUrl, contentDescription = skin.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+            if (equipped) {
+                Text("EQUIPPED", fontFamily = Mono, fontSize = 9.sp, color = tierColor, modifier = Modifier.align(Alignment.TopStart))
+            }
         }
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -268,26 +329,16 @@ private fun SkinTile(owned: OwnedSkin, onClick: () -> Unit) {
                 AsyncImage(model = skin.tierIconUrl, contentDescription = skin.tierName, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
             }
-            Text(skin.name, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(skin.name, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         }
-        val toMax = owned.radianiteToMax?.takeIf { it > 0 }
-        if (skin.priceVp != null || toMax != null) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                skin.priceVp?.let { Amount(it, fontFamily = Mono, fontSize = 10.sp, color = Muted) }
-                Spacer(Modifier.weight(1f))
-                // What's left to unlock, as a nudge to finish the skin.
-                toMax?.let { Amount(it, currency = Currency.RADIANITE_POINTS, prefix = "MAX", fontFamily = Mono, fontSize = 10.sp, color = Muted) }
-            }
+        // What's left to unlock, as a nudge to finish the skin.
+        owned.radianiteToMax?.takeIf { it > 0 }?.let {
+            Amount(it, currency = Currency.RADIANITE_POINTS, prefix = "MAX", fontFamily = Mono, fontSize = 10.sp, color = Muted, modifier = Modifier.padding(top = 2.dp))
         }
     }
 }
 
-private val SkinSort.label: String
-    get() = when (this) {
-        SkinSort.NAME -> "Name"
-        SkinSort.RARITY -> "Rarity"
-        SkinSort.PRICE -> "Price"
-        SkinSort.UPGRADES -> "Radianite"
-    }
+private fun LazyGridScope.fullWidth(key: String, content: @Composable () -> Unit) =
+    item(key = key, span = { GridItemSpan(maxLineSpan) }) { content() }
 
-private const val PLACEHOLDER_TILES = 6
+private const val PLACEHOLDER_TILES = 9

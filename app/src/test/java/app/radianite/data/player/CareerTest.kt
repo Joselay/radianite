@@ -6,7 +6,6 @@ import app.radianite.data.content.GameContent
 import app.radianite.data.riot.ContractsResponse
 import app.radianite.data.riot.LeaderboardPlayer
 import app.radianite.data.riot.PlayerMmrResponse
-import app.radianite.data.store.StoreSkin
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -126,44 +125,4 @@ class CareerTest {
         assertEquals("Secret Agent", named.copy(isAnonymized = true).toEntry().name)
         assertEquals(27, named.toEntry().tier)
     }
-
-    @Test
-    fun `collection search matches skin names loosely`() {
-        val collection = collectionOf(owned("Reaver Vandal"), owned("Prime Vandal"), owned("Glitchpop Phantom"))
-
-        assertEquals(listOf("Prime Vandal", "Reaver Vandal"), collection.search(" vandal ").map { it.skin.name })
-        assertEquals(3, collection.search("").size)
-    }
-
-    @Test
-    fun `collection filters by weapon and sorts by rarity or price`() {
-        val collection = collectionOf(
-            owned("Reaver Vandal", weapon = "vandal", rank = 2, price = 1775),
-            owned("Elderflame Vandal", weapon = "vandal", rank = 4, price = 2475),
-            owned("Prime Phantom", weapon = "phantom", rank = 2, price = 1775),
-            owned("Battle Pass Vandal", weapon = "vandal", rank = null, price = null),
-        )
-
-        assertEquals(
-            listOf("Battle Pass Vandal", "Elderflame Vandal", "Reaver Vandal"),
-            collection.search("", weaponId = "vandal").map { it.skin.name },
-        )
-        assertEquals(
-            listOf("Elderflame Vandal", "Prime Phantom", "Reaver Vandal", "Battle Pass Vandal"),
-            collection.search("", sort = SkinSort.RARITY).map { it.skin.name },
-        )
-        assertEquals(
-            listOf("Elderflame Vandal", "Prime Phantom", "Reaver Vandal", "Battle Pass Vandal"),
-            collection.search("", sort = SkinSort.PRICE).map { it.skin.name },
-        )
-    }
-
-    private fun owned(name: String, weapon: String? = null, rank: Int? = null, price: Int? = null) = OwnedSkin(
-        StoreSkin(name.lowercase(), name = name, iconUrl = null, priceVp = price, tierName = null, tierColor = null, tierIconUrl = null),
-        weaponId = weapon,
-        tierRank = rank,
-    )
-
-    private fun collectionOf(vararg skins: OwnedSkin) =
-        PlayerCollection(emptyList(), skins.sortedBy { it.skin.name }, ownedAgents = null, totalAgents = 0, valueVp = null, weapons = emptyList())
 }

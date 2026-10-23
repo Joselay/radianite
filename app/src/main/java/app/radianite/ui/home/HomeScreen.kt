@@ -48,6 +48,7 @@ import app.radianite.R
 import app.radianite.data.account.SavedAccount
 import app.radianite.data.comps.MapGuide
 import app.radianite.data.match.MatchSummary
+import app.radianite.data.player.EquippedWeapon
 import app.radianite.data.store.StoreBundle
 import app.radianite.data.store.StoreSkin
 import app.radianite.ui.AppUiState
@@ -60,6 +61,8 @@ import app.radianite.ui.career.LeaderboardScreen
 import app.radianite.ui.career.LeaderboardViewModel
 import app.radianite.ui.collection.CollectionScreen
 import app.radianite.ui.collection.CollectionViewModel
+import app.radianite.ui.collection.UpgradesScreen
+import app.radianite.ui.collection.WeaponSkinsScreen
 import app.radianite.ui.common.LoadingPane
 import app.radianite.ui.common.LocalAccountCard
 import app.radianite.ui.common.LocalGameContent
@@ -116,6 +119,14 @@ private sealed interface Overlay {
 
     data object Wishlist : Overlay {
         override val key get() = "wishlist"
+    }
+
+    data class Weapon(val weapon: EquippedWeapon) : Overlay {
+        override val key get() = "weapon-${weapon.weaponId}"
+    }
+
+    data object Upgrades : Overlay {
+        override val key get() = "upgrades"
     }
 }
 
@@ -244,6 +255,8 @@ private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, on
                             viewModel = viewModel(key = "collection-$account") { CollectionViewModel(data.players) },
                             onOpenAccounts = onOpenAccounts,
                             onOpenSkin = { open(Overlay.Skin(it)) },
+                            onOpenWeapon = { open(Overlay.Weapon(it)) },
+                            onOpenUpgrades = { open(Overlay.Upgrades) },
                         )
                     }
                 }
@@ -308,6 +321,18 @@ private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, on
                     }
                     Overlay.Leaderboard -> LeaderboardScreen(
                         viewModel = viewModel(key = "leaderboard-$account") { LeaderboardViewModel(data.players) },
+                        onBack = ::back,
+                    )
+                    // Both share the Collection tab's view model, so they open on what the tab already loaded.
+                    is Overlay.Weapon -> WeaponSkinsScreen(
+                        weapon = top.weapon,
+                        viewModel = viewModel(key = "collection-$account") { CollectionViewModel(data.players) },
+                        onOpenSkin = { if (it.skinUuid != null) open(Overlay.Skin(it)) },
+                        onBack = ::back,
+                    )
+                    Overlay.Upgrades -> UpgradesScreen(
+                        viewModel = viewModel(key = "collection-$account") { CollectionViewModel(data.players) },
+                        onOpenSkin = { if (it.skinUuid != null) open(Overlay.Skin(it)) },
                         onBack = ::back,
                     )
                     Overlay.Wishlist -> {
