@@ -191,6 +191,7 @@ class MatchRecordTest {
         assertEquals("You", nameless.displayName(isMe = true, agentName = "Jett"))
         assertEquals("Jett", nameless.displayName(isMe = false, agentName = "Jett"))
         assertEquals("Player", nameless.displayName(isMe = false, agentName = null))
+        assertEquals("Alt#EUW", nameless.displayName(isMe = false, agentName = "Jett", knownRiotId = "Alt#EUW"))
     }
 
     @Test

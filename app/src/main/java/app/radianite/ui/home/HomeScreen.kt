@@ -155,7 +155,7 @@ fun HomeScreen(
     var showAccounts by rememberSaveable { mutableStateOf(false) }
     val card = accounts.find { it.puuid == state.puuid }?.cardId
     CompositionLocalProvider(LocalGameContent provides content, LocalAccountCard provides card) {
-        SignedInTabs(container, state, onOpenAccounts = { showAccounts = true })
+        SignedInTabs(container, state, accounts, onOpenAccounts = { showAccounts = true })
     }
     if (showAccounts) {
         AccountsSheet(
@@ -170,7 +170,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, onOpenAccounts: () -> Unit) {
+private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, accounts: List<SavedAccount>, onOpenAccounts: () -> Unit) {
     val account = state.puuid
     val data = container.accountData(account)
     var tab by rememberSaveable { mutableStateOf(Tab.STORE) }
@@ -293,7 +293,11 @@ private fun SignedInTabs(container: AppContainer, state: AppUiState.SignedIn, on
                         }
                         when (val m = match) {
                             MatchLookup.Loading -> LoadingPane()
-                            is MatchLookup.Found -> MatchDetailScreen(m.summary, onBack = ::back)
+                            is MatchLookup.Found -> MatchDetailScreen(
+                                m.summary,
+                                knownRiotIds = remember(accounts) { accounts.filter { '#' in it.riotId }.associate { it.puuid to it.riotId } },
+                                onBack = ::back,
+                            )
                             // Sign-out or a cleared cache dropped the match; fall back to what's underneath.
                             MatchLookup.Missing -> LaunchedEffect(top) { back() }
                         }

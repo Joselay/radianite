@@ -63,9 +63,10 @@ import coil3.compose.AsyncImage
 import java.text.DateFormat
 import java.util.Date
 
+/** [knownRiotIds] names the accounts signed in on this device by PUUID, the only players Riot's blank names can be filled in for. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MatchDetailScreen(match: MatchSummary, onBack: () -> Unit) {
+fun MatchDetailScreen(match: MatchSummary, knownRiotIds: Map<String, String>, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     val content = LocalGameContent.current
     val record = match.record
@@ -135,7 +136,15 @@ fun MatchDetailScreen(match: MatchSummary, onBack: () -> Unit) {
                     ScoreboardHeader()
                 }
                 items(board.players, key = { "player-" + it.puuid }) { player ->
-                    ScoreboardRow(player, isMe = player.puuid == me.puuid, showRank = record.isRanked)
+                    val isMe = player.puuid == me.puuid
+                    ScoreboardRow(
+                        player,
+                        isMe = isMe,
+                        // Everyone queues in a party of their own, so a shared one means they queued together.
+                        inMyParty = !isMe && me.partyId.isNotBlank() && player.partyId == me.partyId,
+                        knownRiotId = knownRiotIds[player.puuid],
+                        showRank = record.isRanked,
+                    )
                 }
             }
         }
@@ -260,7 +269,7 @@ private fun ScoreboardHeader() {
 }
 
 @Composable
-private fun ScoreboardRow(player: PlayerRecord, isMe: Boolean, showRank: Boolean) {
+private fun ScoreboardRow(player: PlayerRecord, isMe: Boolean, inMyParty: Boolean, knownRiotId: String?, showRank: Boolean) {
     val content = LocalGameContent.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -277,7 +286,7 @@ private fun ScoreboardRow(player: PlayerRecord, isMe: Boolean, showRank: Boolean
         val ranked = showRank && player.competitiveTier > 0
         Column(Modifier.weight(1f)) {
             Text(
-                player.displayName(isMe, agentName),
+                player.displayName(isMe, agentName, knownRiotId),
                 fontWeight = if (isMe) FontWeight.Bold else FontWeight.Medium,
                 fontSize = 13.sp,
                 maxLines = 1,
@@ -288,8 +297,12 @@ private fun ScoreboardRow(player: PlayerRecord, isMe: Boolean, showRank: Boolean
                     RankIcon(player.competitiveTier, 14.dp)
                     Spacer(Modifier.width(4.dp))
                 }
+                if (inMyParty) {
+                    Text("PARTY", fontFamily = Mono, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ValorantRed)
+                    Spacer(Modifier.width(6.dp))
+                }
                 val detail = listOfNotNull(
-                    agentName?.takeIf { player.hasName || isMe },
+                    agentName?.takeIf { player.hasName || isMe || knownRiotId != null },
                     content?.rank(player.competitiveTier)?.name?.takeIf { ranked },
                 ).joinToString(" · ")
                 Text(detail, fontSize = 10.sp, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)

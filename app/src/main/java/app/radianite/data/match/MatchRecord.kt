@@ -76,10 +76,14 @@ data class PlayerRecord(
     /** Riot leaves names out of match details now. */
     val hasName: Boolean get() = gameName.isNotBlank()
 
-    /** Nameless rows go by agent, as the game's own history does. */
-    fun displayName(isMe: Boolean, agentName: String?): String = when {
+    /**
+     * Nameless rows go by agent, as the game's own history does, unless the player is one of the accounts
+     * signed in on this device: their [knownRiotId] is already known, so nothing is looked up.
+     */
+    fun displayName(isMe: Boolean, agentName: String?, knownRiotId: String? = null): String = when {
         hasName -> gameName
         isMe -> "You"
+        knownRiotId != null -> knownRiotId
         else -> agentName ?: "Player"
     }
 }
